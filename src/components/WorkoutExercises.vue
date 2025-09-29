@@ -32,6 +32,9 @@
             placeholder="8"
             :value="getCurrentValue(exercise, 'reps', i-1)"
             @change="$emit('update-exercise', workoutType, exercise, i-1, 'reps', $event.target.value)"
+            @change="handleInputChange($event, workoutType, exercise, i-1, 'reps')"
+            @focus="handleFocus($event, 'reps')"
+            @blur="handleBlur($event, 'reps')"
           >
           <input 
             type="number" 
@@ -39,6 +42,9 @@
             placeholder="0"
             :value="getCurrentValue(exercise, 'weight', i-1)"
             @change="$emit('update-exercise', workoutType, exercise, i-1, 'weight', $event.target.value)"
+            @change="handleInputChange($event, workoutType, exercise, i-1, 'weight')"
+            @focus="handleFocus($event, 'weight')"
+            @blur="handleBlur($event, 'weight')"
           >
         </div>
       </div>
@@ -55,6 +61,11 @@ export default {
     workoutData: Object
   },
   emits: ['update-exercise', 'update-sets'],
+  data() {
+    return {
+      focusedInputs: new Set()
+    }
+  },
   methods: {
     getCurrentValue(exercise, field, index) {
       const exerciseData = this.workoutData[exercise];
@@ -65,6 +76,42 @@ export default {
       // Only return non-default values
       const defaultValue = field === 'reps' ? 8 : 0;
       return (value === defaultValue || value === null || value === undefined) ? '' : value.toString();
+      
+      // Return empty string if value is default (so placeholder shows)
+      return (value === defaultValue || value === null || value === undefined) ? '' : value.toString();
+    },
+    
+    handleFocus(event, field) {
+      // Store that this input is focused
+      this.focusedInputs.add(event.target);
+      
+      // Clear the field if it contains the default value
+      const defaultValue = field === 'reps' ? '8' : '0';
+      if (event.target.value === '' || event.target.value === defaultValue) {
+        event.target.value = '';
+      }
+    },
+    
+    handleBlur(event, field) {
+      // Remove from focused inputs
+      this.focusedInputs.delete(event.target);
+      
+      // If empty after blur, restore placeholder behavior
+      if (event.target.value === '') {
+        event.target.value = '';
+      }
+    },
+    
+    handleInputChange(event, workoutType, exercise, setIndex, field) {
+      const value = event.target.value;
+      
+      // If input is empty after change, keep it empty but don't update the model yet
+      if (value === '') {
+        return;
+      }
+      
+      // Update the model with the new value
+      this.$emit('update-exercise', workoutType, exercise, setIndex, field, value);
     }
   }
 }

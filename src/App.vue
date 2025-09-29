@@ -189,8 +189,8 @@ export default {
         exerciseData[field] = [];
       }
       
-      // Convert empty string to default value
-      if (value === '') {
+      // Handle empty values - set to default
+      if (value === '' || value === null || value === undefined) {
         value = field === 'reps' ? 8 : 0;
       }
       
