@@ -29,18 +29,16 @@
           <input 
             type="number" 
             class="set-input" 
-            :placeholder="getDefaultValue(exercise, 'reps', i-1)"
+            placeholder="8"
             :value="getCurrentValue(exercise, 'reps', i-1)"
-            @input="$emit('update-exercise', workoutType, exercise, i-1, 'reps', $event.target.value)"
-            @focus="clearIfDefault($event, getDefaultValue(exercise, 'reps', i-1))"
+            @change="$emit('update-exercise', workoutType, exercise, i-1, 'reps', $event.target.value)"
           >
           <input 
             type="number" 
             class="set-input" 
-            :placeholder="getDefaultValue(exercise, 'weight', i-1)"
+            placeholder="0"
             :value="getCurrentValue(exercise, 'weight', i-1)"
-            @input="$emit('update-exercise', workoutType, exercise, i-1, 'weight', $event.target.value)"
-            @focus="clearIfDefault($event, getDefaultValue(exercise, 'weight', i-1))"
+            @change="$emit('update-exercise', workoutType, exercise, i-1, 'weight', $event.target.value)"
           >
         </div>
       </div>
@@ -58,26 +56,15 @@ export default {
   },
   emits: ['update-exercise', 'update-sets'],
   methods: {
-    getDefaultValue(exercise, field, index) {
-      return field === 'reps' ? '8' : '0';
-    },
-    
     getCurrentValue(exercise, field, index) {
       const exerciseData = this.workoutData[exercise];
       if (!exerciseData || !exerciseData[field]) {
         return '';
       }
       const value = exerciseData[field][index];
+      // Only return non-default values
       const defaultValue = field === 'reps' ? 8 : 0;
-      
-      // Return empty string if value is default (so placeholder shows)
-      return value === defaultValue ? '' : value.toString();
-    },
-    
-    clearIfDefault(event, defaultValue) {
-      if (event.target.value === '' || event.target.value === defaultValue) {
-        event.target.value = '';
-      }
+      return (value === defaultValue || value === null || value === undefined) ? '' : value.toString();
     }
   }
 }

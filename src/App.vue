@@ -452,15 +452,35 @@ input, select, textarea {
   color: #ccc;
 }
 
-/* Ensure inputs look good */
+/* Improved mobile input styling */
 .set-input {
-  color: #000; /* Black text for user-entered values */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 12px 8px;
+  font-size: 16px; /* Prevent zoom */
   background: rgba(255, 255, 255, 0.95);
 }
 
-.set-input:focus {
-  background: rgba(255, 255, 255, 1);
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
+/* Remove number input spinners on mobile */
+.set-input::-webkit-outer-spin-button,
+.set-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
+
+.set-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Focus state */
+.set-input:focus {
+  background: white;
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
 </style>
