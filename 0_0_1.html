@@ -12,7 +12,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #27ffb7 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
             color: white;
@@ -119,6 +119,22 @@
             gap: 8px;
         }
         
+        .set-header {
+            display: grid;
+            grid-template-columns: 50px 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 0 5px;
+        }
+        
+        .set-header-label {
+            font-weight: 600;
+            font-size: 0.9em;
+            opacity: 0.8;
+            text-align: center;
+        }
+        
         .set-row {
             display: grid;
             grid-template-columns: 50px 1fr 1fr;
@@ -129,6 +145,7 @@
         .set-label {
             font-weight: 600;
             font-size: 0.9em;
+            text-align: center;
         }
         
         .set-input {
@@ -240,24 +257,18 @@
             chest: [
                 "Bench Press",
                 "Incline Press",
-                "Chest Fly",
-                "Push Up",
-                "Cable Crossover",
-                "Plank",
-                "Russian Twist",
-                "Leg Raise",
-                "Mountain Climbers"
+                "Bent-over Row",
+                "Shrug",
+                "Lying Leg Raise",
+                "Sit-up",
+                "Twisting Sit-up"
             ],
             legs: [
-                "Squat",
                 "Deadlift",
-                "Lunges",
-                "Leg Press",
-                "Calf Raises",
-                "Hamstring Curl",
-                "Leg Extension",
-                "Hip Thrust",
-                "Box Jumps"
+                "Squat",
+                "Straight Leg Deadlift",
+                "Standing Calf Raise",
+                "Reverse Calf Raise"
             ]
         };
 
@@ -350,13 +361,22 @@
             const exerciseData = currentWorkoutData[workoutType][exerciseName];
             let html = '';
             
+            // Add header row with column labels
+            html += `
+                <div class="set-header">
+                    <div class="set-header-label">Set</div>
+                    <div class="set-header-label">Reps</div>
+                    <div class="set-header-label">Weight</div>
+                </div>
+            `;
+            
             for (let i = 0; i < setsCount; i++) {
                 const repValue = exerciseData.reps && exerciseData.reps[i] !== undefined ? exerciseData.reps[i] : 8;
                 const weightValue = exerciseData.weight && exerciseData.weight[i] !== undefined ? exerciseData.weight[i] : 0;
                 
                 html += `
                     <div class="set-row">
-                        <div class="set-label">Set ${i + 1}</div>
+                        <div class="set-label">${i + 1}</div>
                         <input type="number" 
                                class="set-input" 
                                placeholder="Reps" 
