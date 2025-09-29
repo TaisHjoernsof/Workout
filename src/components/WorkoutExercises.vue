@@ -32,9 +32,16 @@
           controls 
           preload="metadata"
           class="exercise-video"
+          :data-exercise="exercise"
+          @error="handleVideoError(exercise)"
+          @loadeddata="handleVideoLoaded(exercise)"
         >
           Your browser does not support the video tag.
+          <p>Video path: {{ getVideoPath(exercise) }}</p>
         </video>
+        <div v-if="videoError[exercise]" class="video-error">
+          Video not found: {{ getVideoPath(exercise) }}
+        </div>
       </div>
       
       <div class="sets-container">
@@ -83,7 +90,8 @@ export default {
   data() {
     return {
       focusedInputs: new Set(),
-      showVideo: {}
+      showVideo: {},
+      videoError: {}
     }
   },
   methods: {
@@ -140,6 +148,39 @@ export default {
     
     toggleVideo(exercise) {
       this.$set(this.showVideo, exercise, !this.showVideo[exercise]);
+    },
+
+    hasVideo(exercise) {
+      return true;
+    },
+    
+    getVideoPath(exercise) {
+      // Clean the exercise name for use in file paths
+      const cleanName = exercise.replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, ' ');
+      // Use relative path from public folder
+      return `videos/${cleanName}.webm`;
+    },
+    
+    toggleVideo(exercise) {
+      const videoPath = this.getVideoPath(exercise);
+      console.log('Toggling video for:', exercise);
+      console.log('Video path:', videoPath);
+      
+      // Reset error state when toggling
+      this.$set(this.videoError, exercise, false);
+      
+      this.$set(this.showVideo, exercise, !this.showVideo[exercise]);
+    },
+
+    handleVideoError(exercise) {
+      console.error(`Failed to load video for: ${exercise}`);
+      console.error(`Tried path: ${this.getVideoPath(exercise)}`);
+      this.$set(this.videoError, exercise, true);
+    },
+
+    handleVideoLoaded(exercise) {
+      console.log(`Video loaded successfully for: ${exercise}`);
+      this.$set(this.videoError, exercise, false);
     }
   }
 }
@@ -197,5 +238,12 @@ export default {
   border: none;
   border-radius: 5px;
   text-align: center;
+}
+
+.video-error {
+  color: #ff6b6b;
+  text-align: center;
+  padding: 10px;
+  font-size: 0.9em;
 }
 </style>
