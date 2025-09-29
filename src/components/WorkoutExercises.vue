@@ -37,7 +37,6 @@
           @loadeddata="handleVideoLoaded(exercise)"
         >
           Your browser does not support the video tag.
-          <p>Video path: {{ getVideoPath(exercise) }}</p>
         </video>
         <div v-if="videoError[exercise]" class="video-error">
           Video not found: {{ getVideoPath(exercise) }}
@@ -134,23 +133,6 @@ export default {
     },
     
     hasVideo(exercise) {
-      // Check if video exists for this exercise
-      const videoPath = this.getVideoPath(exercise);
-      // This is a simple check - in a real app, you might want to verify the file exists
-      return true; // Assuming all exercises have videos
-    },
-    
-    getVideoPath(exercise) {
-      // Clean the exercise name for use in file paths
-      const cleanName = exercise.replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, ' ');
-      return `/src/videos/${cleanName}.webm`;
-    },
-    
-    toggleVideo(exercise) {
-      this.$set(this.showVideo, exercise, !this.showVideo[exercise]);
-    },
-
-    hasVideo(exercise) {
       return true;
     },
     
@@ -167,20 +149,21 @@ export default {
       console.log('Video path:', videoPath);
       
       // Reset error state when toggling
-      this.$set(this.videoError, exercise, false);
+      this.videoError[exercise] = false;
       
-      this.$set(this.showVideo, exercise, !this.showVideo[exercise]);
+      // Toggle showVideo for this exercise
+      this.showVideo[exercise] = !this.showVideo[exercise];
     },
 
     handleVideoError(exercise) {
       console.error(`Failed to load video for: ${exercise}`);
       console.error(`Tried path: ${this.getVideoPath(exercise)}`);
-      this.$set(this.videoError, exercise, true);
+      this.videoError[exercise] = true;
     },
 
     handleVideoLoaded(exercise) {
       console.log(`Video loaded successfully for: ${exercise}`);
-      this.$set(this.videoError, exercise, false);
+      this.videoError[exercise] = false;
     }
   }
 }
