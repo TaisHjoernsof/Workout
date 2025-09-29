@@ -29,7 +29,7 @@
           <input 
             type="number" 
             class="set-input" 
-            :placeholder="getDefaultValue(exercise, 'reps', i-1)"
+            :placeholder="getCurrentValue(exercise, 'reps', i-1)"
             @change="handleInputChange($event, workoutType, exercise, i-1, 'reps')"
             @focus="handleFocus($event, 'reps')"
             @blur="handleBlur($event, 'reps')"
@@ -37,7 +37,7 @@
           <input 
             type="number" 
             class="set-input" 
-            :placeholder="getDefaultValue(exercise, 'weight', i-1)"
+            :placeholder="getCurrentValue(exercise, 'weight', i-1)"
             @change="handleInputChange($event, workoutType, exercise, i-1, 'weight')"
             @focus="handleFocus($event, 'weight')"
             @blur="handleBlur($event, 'weight')"
