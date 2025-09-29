@@ -463,4 +463,44 @@ input, select, textarea {
   outline: none;
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
 }
+
+/* Add to your existing CSS in App.vue */
+.exercise-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.video-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  color: white;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.3s ease;
+}
+
+.video-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.video-container {
+  margin: 15px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.exercise-video {
+  width: 100%;
+  max-height: 300px;
+  display: block;
+}
 </style>

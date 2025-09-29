@@ -3,17 +3,40 @@
     <div v-for="exercise in exercises" :key="exercise" class="exercise-panel">
       <div class="exercise-header">
         <div class="exercise-name">{{ exercise }}</div>
-        <div class="sets-control">
-          <span>Sets:</span>
-          <input 
-            type="number" 
-            :value="workoutData[exercise]?.sets || 3"
-            min="1" 
-            max="10"
-            @change="$emit('update-sets', workoutType, exercise, $event.target.value)"
+        <div class="exercise-controls">
+          <button 
+            v-if="hasVideo(exercise)"
+            class="video-btn"
+            @click="toggleVideo(exercise)"
+            :title="`${showVideo[exercise] ? 'Hide' : 'Show'} demonstration video`"
           >
+            {{ showVideo[exercise] ? '▲' : '▶' }}
+          </button>
+          <div class="sets-control">
+            <span>Sets:</span>
+            <input 
+              type="number" 
+              :value="workoutData[exercise]?.sets || 3"
+              min="1" 
+              max="10"
+              @change="$emit('update-sets', workoutType, exercise, $event.target.value)"
+            >
+          </div>
         </div>
       </div>
+      
+      <!-- Video Display -->
+      <div v-if="showVideo[exercise] && hasVideo(exercise)" class="video-container">
+        <video 
+          :src="getVideoPath(exercise)" 
+          controls 
+          preload="metadata"
+          class="exercise-video"
+        >
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      
       <div class="sets-container">
         <div class="set-header">
           <div class="set-header-label">Set</div>
@@ -59,7 +82,8 @@ export default {
   emits: ['update-exercise', 'update-sets'],
   data() {
     return {
-      focusedInputs: new Set()
+      focusedInputs: new Set(),
+      showVideo: {}
     }
   },
   methods: {
@@ -75,15 +99,11 @@ export default {
       const value = exerciseData[field][index];
       const defaultValue = field === 'reps' ? 8 : 0;
       
-      // Return empty string if value is default (so placeholder shows)
       return (value === defaultValue || value === null || value === undefined) ? '' : value.toString();
     },
     
     handleFocus(event, field) {
-      // Store that this input is focused
       this.focusedInputs.add(event.target);
-      
-      // Clear the field if it contains the default value
       const defaultValue = field === 'reps' ? '8' : '0';
       if (event.target.value === '' || event.target.value === defaultValue) {
         event.target.value = '';
@@ -91,10 +111,7 @@ export default {
     },
     
     handleBlur(event, field) {
-      // Remove from focused inputs
       this.focusedInputs.delete(event.target);
-      
-      // If empty after blur, restore placeholder behavior
       if (event.target.value === '') {
         event.target.value = '';
       }
@@ -102,15 +119,83 @@ export default {
     
     handleInputChange(event, workoutType, exercise, setIndex, field) {
       const value = event.target.value;
-      
-      // If input is empty after change, keep it empty but don't update the model yet
       if (value === '') {
         return;
       }
-      
-      // Update the model with the new value
       this.$emit('update-exercise', workoutType, exercise, setIndex, field, value);
+    },
+    
+    hasVideo(exercise) {
+      // Check if video exists for this exercise
+      const videoPath = this.getVideoPath(exercise);
+      // This is a simple check - in a real app, you might want to verify the file exists
+      return true; // Assuming all exercises have videos
+    },
+    
+    getVideoPath(exercise) {
+      // Clean the exercise name for use in file paths
+      const cleanName = exercise.replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, ' ');
+      return `/src/videos/${cleanName}.webm`;
+    },
+    
+    toggleVideo(exercise) {
+      this.$set(this.showVideo, exercise, !this.showVideo[exercise]);
     }
   }
 }
 </script>
+
+<style scoped>
+.exercise-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.video-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  color: white;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.3s ease;
+}
+
+.video-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.video-container {
+  margin: 15px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.exercise-video {
+  width: 100%;
+  max-height: 300px;
+  display: block;
+}
+
+.sets-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sets-control input {
+  width: 50px;
+  padding: 5px;
+  border: none;
+  border-radius: 5px;
+  text-align: center;
+}
+</style>
