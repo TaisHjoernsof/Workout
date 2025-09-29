@@ -30,37 +30,32 @@
         
         .header {
             text-align: center;
-            margin-bottom: 40px;
-            padding-top: 20px;
+            margin-bottom: 20px;
+            padding-top: 10px;
         }
         
         .header h1 {
-            font-size: 2.5em;
+            font-size: 2em;
             font-weight: 700;
             margin-bottom: 10px;
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-        
         .workout-buttons {
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            margin-top: 40px;
+            gap: 15px;
+            margin-top: 30px;
         }
         
         .workout-btn {
             background: rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(10px);
             border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            padding: 25px 20px;
+            border-radius: 15px;
+            padding: 20px;
             color: white;
-            font-size: 1.3em;
+            font-size: 1.2em;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -70,74 +65,95 @@
         .workout-btn:hover {
             background: rgba(255, 255, 255, 0.25);
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-        }
-        
-        .workout-btn:active {
-            transform: translateY(0);
         }
         
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 15px;
+            border-radius: 10px;
             padding: 12px 20px;
             color: white;
             font-size: 1em;
             cursor: pointer;
-            margin-top: 30px;
+            margin-top: 20px;
             width: 100%;
         }
         
-        .workout-content {
+        .exercise-panel {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            margin-top: 20px;
-        }
-        
-        .workout-content h2 {
-            text-align: center;
-            margin-bottom: 25px;
-            font-size: 1.8em;
-        }
-        
-        .exercise-input {
+            border-radius: 15px;
+            padding: 15px;
             margin-bottom: 15px;
         }
         
-        .exercise-input input {
-            width: 100%;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1em;
-            background: rgba(255, 255, 255, 0.9);
+        .exercise-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
         }
         
-        .add-exercise-btn, .save-workout-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 15px;
+        .exercise-name {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+        
+        .sets-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sets-control input {
+            width: 50px;
+            padding: 5px;
+            border: none;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .sets-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        
+        .set-row {
+            display: grid;
+            grid-template-columns: 50px 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .set-label {
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        
+        .set-input {
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            text-align: center;
+        }
+        
+        .save-workout-btn {
+            background: rgba(76, 175, 80, 0.8);
+            border: none;
+            border-radius: 10px;
             padding: 15px;
             color: white;
             font-size: 1.1em;
             font-weight: 600;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
-        }
-        
-        .exercise-list {
             margin-top: 20px;
         }
         
-        .exercise-item {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
+        .save-workout-btn:active {
+            background: rgba(76, 175, 80, 1);
         }
     </style>
 </head>
@@ -166,111 +182,240 @@
     <div id="screen-arms" class="screen">
         <div class="header">
             <h1>Arms & Shoulders</h1>
-            <p>Track your upper body workout</p>
+            <p>Track your sets and reps</p>
         </div>
         
-        <div class="workout-content">
-            <h2>Add Exercises</h2>
-            
-            <div class="exercise-input">
-                <input type="text" id="arms-exercise-name" placeholder="Exercise name">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="arms-exercise-sets" placeholder="Sets">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="arms-exercise-reps" placeholder="Reps">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="arms-exercise-weight" placeholder="Weight (kg)">
-            </div>
-            
-            <button class="add-exercise-btn" onclick="addExercise('arms')">Add Exercise</button>
-            
-            <div class="exercise-list" id="arms-exercise-list">
-                <!-- Exercises will be added here -->
-            </div>
-            
-            <button class="save-workout-btn" onclick="saveWorkout('arms')">Save Workout</button>
-            <button class="back-btn" onclick="showScreen('screen-choose')">Back to Workouts</button>
+        <div id="arms-exercises-container">
+            <!-- Exercises will be generated here -->
         </div>
+        
+        <button class="save-workout-btn" onclick="saveWorkout('arms')">Save Workout</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
     </div>
 
     <!-- Screen 3: Chest & Core Workout -->
     <div id="screen-chest" class="screen">
         <div class="header">
             <h1>Chest & Core</h1>
-            <p>Track your chest and core workout</p>
+            <p>Track your sets and reps</p>
         </div>
         
-        <div class="workout-content">
-            <h2>Add Exercises</h2>
-            
-            <div class="exercise-input">
-                <input type="text" id="chest-exercise-name" placeholder="Exercise name">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="chest-exercise-sets" placeholder="Sets">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="chest-exercise-reps" placeholder="Reps">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="chest-exercise-weight" placeholder="Weight (kg)">
-            </div>
-            
-            <button class="add-exercise-btn" onclick="addExercise('chest')">Add Exercise</button>
-            
-            <div class="exercise-list" id="chest-exercise-list">
-                <!-- Exercises will be added here -->
-            </div>
-            
-            <button class="save-workout-btn" onclick="saveWorkout('chest')">Save Workout</button>
-            <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
+        <div id="chest-exercises-container">
+            <!-- Exercises will be generated here -->
         </div>
+        
+        <button class="save-workout-btn" onclick="saveWorkout('chest')">Save Workout</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
     </div>
 
     <!-- Screen 4: Legs Workout -->
     <div id="screen-legs" class="screen">
         <div class="header">
             <h1>Legs</h1>
-            <p>Track your leg workout</p>
+            <p>Track your sets and reps</p>
         </div>
         
-        <div class="workout-content">
-            <h2>Add Exercises</h2>
-            
-            <div class="exercise-input">
-                <input type="text" id="legs-exercise-name" placeholder="Exercise name">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="legs-exercise-sets" placeholder="Sets">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="legs-exercise-reps" placeholder="Reps">
-            </div>
-            <div class="exercise-input">
-                <input type="number" id="legs-exercise-weight" placeholder="Weight (kg)">
-            </div>
-            
-            <button class="add-exercise-btn" onclick="addExercise('legs')">Add Exercise</button>
-            
-            <div class="exercise-list" id="legs-exercise-list">
-                <!-- Exercises will be added here -->
-            </div>
-            
-            <button class="save-workout-btn" onclick="saveWorkout('legs')">Save Workout</button>
-            <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
+        <div id="legs-exercises-container">
+            <!-- Exercises will be generated here -->
         </div>
+        
+        <button class="save-workout-btn" onclick="saveWorkout('legs')">Save Workout</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
     </div>
 
     <script>
-        // Current workouts in memory
-        let currentWorkouts = {
-            arms: [],
-            chest: [],
-            legs: []
+        // Exercise definitions for each workout type
+        const workoutExercises = {
+            arms: [
+                "Shoulder Press",
+                "Shoulder Raise", 
+                "Rear Delt Row",
+                "Tricep Extension",
+                "Curl",
+                "Concentration Curl",
+                "Hammer Curl",
+                "Wrist Curl",
+                "Reverse Wrist Curl"
+            ],
+            chest: [
+                "Bench Press",
+                "Incline Press",
+                "Chest Fly",
+                "Push Up",
+                "Cable Crossover",
+                "Plank",
+                "Russian Twist",
+                "Leg Raise",
+                "Mountain Climbers"
+            ],
+            legs: [
+                "Squat",
+                "Deadlift",
+                "Lunges",
+                "Leg Press",
+                "Calf Raises",
+                "Hamstring Curl",
+                "Leg Extension",
+                "Hip Thrust",
+                "Box Jumps"
+            ]
         };
+
+        // Default workout data structure
+        let defaultWorkoutData = {
+            arms: {},
+            chest: {},
+            legs: {}
+        };
+
+        // Current workout data
+        let currentWorkoutData = JSON.parse(JSON.stringify(defaultWorkoutData));
+
+        // Initialize the app
+        function initApp() {
+            loadDefaultData();
+            initializeWorkoutScreens();
+        }
+
+        // Load default data from localStorage
+        function loadDefaultData() {
+            const savedData = localStorage.getItem('workoutDefaults');
+            if (savedData) {
+                defaultWorkoutData = JSON.parse(savedData);
+                currentWorkoutData = JSON.parse(JSON.stringify(defaultWorkoutData));
+            } else {
+                // Initialize with default values
+                Object.keys(workoutExercises).forEach(workoutType => {
+                    workoutExercises[workoutType].forEach(exercise => {
+                        defaultWorkoutData[workoutType][exercise] = {
+                            sets: 3,
+                            reps: Array(3).fill(8),
+                            weight: Array(3).fill(0)
+                        };
+                    });
+                });
+                currentWorkoutData = JSON.parse(JSON.stringify(defaultWorkoutData));
+                saveDefaultData();
+            }
+        }
+
+        // Save default data to localStorage
+        function saveDefaultData() {
+            localStorage.setItem('workoutDefaults', JSON.stringify(defaultWorkoutData));
+        }
+
+        // Initialize workout screens with exercises
+        function initializeWorkoutScreens() {
+            Object.keys(workoutExercises).forEach(workoutType => {
+                const container = document.getElementById(`${workoutType}-exercises-container`);
+                container.innerHTML = '';
+                
+                workoutExercises[workoutType].forEach(exercise => {
+                    const exercisePanel = createExercisePanel(workoutType, exercise);
+                    container.appendChild(exercisePanel);
+                });
+            });
+        }
+
+        // Create exercise panel with sets
+        function createExercisePanel(workoutType, exerciseName) {
+            const panel = document.createElement('div');
+            panel.className = 'exercise-panel';
+            
+            const exerciseData = currentWorkoutData[workoutType][exerciseName];
+            const setsCount = exerciseData.sets || 3;
+            
+            panel.innerHTML = `
+                <div class="exercise-header">
+                    <div class="exercise-name">${exerciseName}</div>
+                    <div class="sets-control">
+                        <span>Sets:</span>
+                        <input type="number" 
+                               value="${setsCount}" 
+                               min="1" 
+                               max="10"
+                               onchange="updateSets('${workoutType}', '${exerciseName}', this.value)">
+                    </div>
+                </div>
+                <div class="sets-container" id="sets-${workoutType}-${exerciseName.replace(/\s+/g, '-')}">
+                    ${generateSetInputs(workoutType, exerciseName, setsCount)}
+                </div>
+            `;
+            
+            return panel;
+        }
+
+        // Generate set inputs based on number of sets
+        function generateSetInputs(workoutType, exerciseName, setsCount) {
+            const exerciseData = currentWorkoutData[workoutType][exerciseName];
+            let html = '';
+            
+            for (let i = 0; i < setsCount; i++) {
+                const repValue = exerciseData.reps && exerciseData.reps[i] !== undefined ? exerciseData.reps[i] : 8;
+                const weightValue = exerciseData.weight && exerciseData.weight[i] !== undefined ? exerciseData.weight[i] : 0;
+                
+                html += `
+                    <div class="set-row">
+                        <div class="set-label">Set ${i + 1}</div>
+                        <input type="number" 
+                               class="set-input" 
+                               placeholder="Reps" 
+                               value="${repValue}"
+                               onchange="updateExerciseData('${workoutType}', '${exerciseName}', ${i}, 'reps', this.value)">
+                        <input type="number" 
+                               class="set-input" 
+                               placeholder="Weight" 
+                               value="${weightValue}"
+                               onchange="updateExerciseData('${workoutType}', '${exerciseName}', ${i}, 'weight', this.value)">
+                    </div>
+                `;
+            }
+            return html;
+        }
+
+        // Update number of sets for an exercise
+        function updateSets(workoutType, exerciseName, newSetCount) {
+            newSetCount = parseInt(newSetCount);
+            if (newSetCount < 1) newSetCount = 1;
+            if (newSetCount > 10) newSetCount = 10;
+            
+            const exerciseData = currentWorkoutData[workoutType][exerciseName];
+            const currentSets = exerciseData.sets || 3;
+            
+            // Initialize arrays if they don't exist
+            if (!exerciseData.reps) exerciseData.reps = Array(currentSets).fill(8);
+            if (!exerciseData.weight) exerciseData.weight = Array(currentSets).fill(0);
+            
+            // Resize arrays to match new set count
+            if (newSetCount > currentSets) {
+                // Add new sets with default values
+                for (let i = currentSets; i < newSetCount; i++) {
+                    exerciseData.reps[i] = 8;
+                    exerciseData.weight[i] = 0;
+                }
+            } else if (newSetCount < currentSets) {
+                // Remove extra sets
+                exerciseData.reps = exerciseData.reps.slice(0, newSetCount);
+                exerciseData.weight = exerciseData.weight.slice(0, newSetCount);
+            }
+            
+            exerciseData.sets = newSetCount;
+            
+            // Update the UI
+            const setsContainer = document.getElementById(`sets-${workoutType}-${exerciseName.replace(/\s+/g, '-')}`);
+            setsContainer.innerHTML = generateSetInputs(workoutType, exerciseName, newSetCount);
+        }
+
+        // Update exercise data when inputs change
+        function updateExerciseData(workoutType, exerciseName, setIndex, field, value) {
+            const exerciseData = currentWorkoutData[workoutType][exerciseName];
+            
+            if (!exerciseData[field]) {
+                exerciseData[field] = [];
+            }
+            
+            exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
+        }
 
         // Screen navigation
         function showScreen(screenId) {
@@ -281,55 +426,22 @@
             
             // Show the selected screen
             document.getElementById(screenId).classList.add('active');
-        }
-
-        // Add exercise to current workout
-        function addExercise(workoutType) {
-            const name = document.getElementById(`${workoutType}-exercise-name`).value;
-            const sets = document.getElementById(`${workoutType}-exercise-sets`).value;
-            const reps = document.getElementById(`${workoutType}-exercise-reps`).value;
-            const weight = document.getElementById(`${workoutType}-exercise-weight`).value;
             
-            if (!name || !sets || !reps) {
-                alert('Please fill in exercise name, sets, and reps');
-                return;
+            // Reload the workout data when showing a workout screen
+            if (screenId.includes('screen-') && !screenId.includes('choose')) {
+                const workoutType = screenId.replace('screen-', '');
+                loadWorkoutData(workoutType);
             }
-            
-            const exercise = {
-                name,
-                sets: parseInt(sets),
-                reps: parseInt(reps),
-                weight: weight ? parseInt(weight) : null
-            };
-            
-            currentWorkouts[workoutType].push(exercise);
-            updateExerciseList(workoutType);
-            
-            // Clear inputs
-            document.getElementById(`${workoutType}-exercise-name`).value = '';
-            document.getElementById(`${workoutType}-exercise-sets`).value = '';
-            document.getElementById(`${workoutType}-exercise-reps`).value = '';
-            document.getElementById(`${workoutType}-exercise-weight`).value = '';
         }
 
-        // Update the exercise list display
-        function updateExerciseList(workoutType) {
-            const list = document.getElementById(`${workoutType}-exercise-list`);
-            list.innerHTML = currentWorkouts[workoutType].map((ex, index) => `
-                <div class="exercise-item">
-                    <strong>${ex.name}</strong><br>
-                    ${ex.sets} sets * ${ex.reps} reps${ex.weight ? ` * ${ex.weight}kg` : ''}
-                </div>
-            `).join('');
+        // Load workout data for a specific type
+        function loadWorkoutData(workoutType) {
+            currentWorkoutData[workoutType] = JSON.parse(JSON.stringify(defaultWorkoutData[workoutType]));
+            initializeWorkoutScreens();
         }
 
         // Save workout to localStorage
         function saveWorkout(workoutType) {
-            if (currentWorkouts[workoutType].length === 0) {
-                alert('Please add at least one exercise before saving');
-                return;
-            }
-            
             const workoutName = {
                 arms: 'Arms & Shoulders',
                 chest: 'Chest & Core',
@@ -337,25 +449,26 @@
             }[workoutType];
             
             const workout = {
-                date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+                date: new Date().toISOString(),
                 type: workoutName,
-                exercises: [...currentWorkouts[workoutType]]
+                exercises: currentWorkoutData[workoutType]
             };
             
-            // Get existing workouts from localStorage
+            // Save to workout history
             const workouts = JSON.parse(localStorage.getItem('workouts') || '[]');
             workouts.push(workout);
-            
-            // Save back to localStorage
             localStorage.setItem('workouts', JSON.stringify(workouts));
             
-            // Clear current workout
-            currentWorkouts[workoutType] = [];
-            updateExerciseList(workoutType);
+            // Update defaults with current values for next time
+            defaultWorkoutData[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData[workoutType]));
+            saveDefaultData();
             
-            alert('Workout saved successfully!');
+            alert('Workout saved! Your settings are remembered for next time.');
             showScreen('screen-choose');
         }
+
+        // Initialize the app when loaded
+        window.onload = initApp;
     </script>
 </body>
 </html>
