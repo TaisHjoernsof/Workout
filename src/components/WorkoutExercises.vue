@@ -140,7 +140,7 @@ export default {
       // Clean the exercise name for use in file paths
       const cleanName = exercise.replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, ' ');
       // Use relative path from public folder
-      return `videos/${cleanName}.webm`;
+      return `videos/${cleanName}.mp4`;
     },
     
     toggleVideo(exercise) {
