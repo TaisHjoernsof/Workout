@@ -267,7 +267,7 @@ export default {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4c6bf4 0%, #22f0ff 100%);
   min-height: 100vh;
   padding: 20px;
   color: white;
