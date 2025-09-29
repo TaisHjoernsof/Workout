@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
     <title>Workout Tracker</title>
     <style>
         * {
@@ -12,7 +13,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #27ffb7 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
             color: white;
@@ -83,7 +84,7 @@
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border-radius: 15px;
-            padding: 15px;
+            padding: 20px;
             margin-bottom: 15px;
         }
         
@@ -154,6 +155,7 @@
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.9);
             text-align: center;
+            width: 100%;
         }
         
         .save-workout-btn {
@@ -207,7 +209,7 @@
         </div>
         
         <button class="save-workout-btn" onclick="saveWorkout('arms')">Save Workout</button>
-        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">< Back to Workouts</button>
     </div>
 
     <!-- Screen 3: Chest & Core Workout -->
@@ -222,7 +224,7 @@
         </div>
         
         <button class="save-workout-btn" onclick="saveWorkout('chest')">Save Workout</button>
-        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">< Back to Workouts</button>
     </div>
 
     <!-- Screen 4: Legs Workout -->
@@ -237,38 +239,38 @@
         </div>
         
         <button class="save-workout-btn" onclick="saveWorkout('legs')">Save Workout</button>
-        <button class="back-btn" onclick="showScreen('screen-choose')">← Back to Workouts</button>
+        <button class="back-btn" onclick="showScreen('screen-choose')">< Back to Workouts</button>
     </div>
 
     <script>
         // Exercise definitions for each workout type
         const workoutExercises = {
             arms: [
-                "Shoulder Press",
-                "Shoulder Raise", 
-                "Rear Delt Row",
-                "Tricep Extension",
-                "Curl",
-                "Concentration Curl",
-                "Hammer Curl",
-                "Wrist Curl",
-                "Reverse Wrist Curl"
+                "DB - Shoulder Press",
+                "DB - Shoulder Raise", 
+                "DB - Rear Delt Row",
+                "DB - Tricep Extension",
+                "DB - Curl",
+                "DB - Concentration Curl",
+                "DB - Hammer Curl",
+                "DB - Wrist Curl",
+                "DB - Reverse Wrist Curl"
             ],
             chest: [
-                "Bench Press",
-                "Incline Press",
-                "Bent-over Row",
-                "Shrug",
+                "DB - Bench Press",
+                "DB - Incline Press",
+                "DB - Bent-Over Row",
+                "DB - Shrug",
                 "Lying Leg Raise",
-                "Sit-up",
-                "Twisting Sit-up"
+                "Sit-Up",
+                "Twisting Sit-Up",
             ],
             legs: [
-                "Deadlift",
-                "Squat",
-                "Straight Leg Deadlift",
-                "Standing Calf Raise",
-                "Reverse Calf Raise"
+                "BB - Deadlift",
+                "BB - Squat",
+                "BB - Straight-Leg Deadlift",
+                "DB - Standing Calf Raise",
+                "DB - Reverse Calf Raise"
             ]
         };
 
@@ -293,9 +295,24 @@
             const savedData = localStorage.getItem('workoutDefaults');
             if (savedData) {
                 defaultWorkoutData = JSON.parse(savedData);
+                
+                // Ensure all current exercises exist in the loaded data
+                Object.keys(workoutExercises).forEach(workoutType => {
+                    workoutExercises[workoutType].forEach(exercise => {
+                        if (!defaultWorkoutData[workoutType][exercise]) {
+                            defaultWorkoutData[workoutType][exercise] = {
+                                sets: 3,
+                                reps: Array(3).fill(8),
+                                weight: Array(3).fill(0)
+                            };
+                        }
+                    });
+                });
+                
                 currentWorkoutData = JSON.parse(JSON.stringify(defaultWorkoutData));
+                saveDefaultData(); // Save the updated data with new exercises
             } else {
-                // Initialize with default values
+                // Initialize with default values for all exercises
                 Object.keys(workoutExercises).forEach(workoutType => {
                     workoutExercises[workoutType].forEach(exercise => {
                         defaultWorkoutData[workoutType][exercise] = {
