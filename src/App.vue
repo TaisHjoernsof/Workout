@@ -183,13 +183,18 @@ export default {
     }
 
     function updateExerciseData(workoutType, exerciseName, setIndex, field, value) {
-      const exerciseData = currentWorkoutData.value[workoutType][exerciseName]
+      const exerciseData = currentWorkoutData.value[workoutType][exerciseName];
       
       if (!exerciseData[field]) {
-        exerciseData[field] = []
+        exerciseData[field] = [];
       }
       
-      exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value
+      // Handle empty values - set to default
+      if (value === '' || value === null || value === undefined) {
+        value = field === 'reps' ? 8 : 0;
+      }
+      
+      exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
     }
 
     function updateSets(workoutType, exerciseName, newSetCount) {
@@ -271,6 +276,19 @@ body {
   min-height: 100vh;
   padding: 20px;
   color: white;
+}
+/* Add to your existing CSS */
+input, select, textarea {
+  font-size: 16px; /* Prevents iOS zoom */
+  transform: scale(1); /* Ensure no scaling */
+}
+
+/* Prevent zoom on focus */
+@media screen and (max-width: 768px) {
+  input[type="number"],
+  input[type="text"] {
+    font-size: 16px !important;
+  }
 }
 
 .screen {
@@ -422,5 +440,27 @@ body {
 
 .save-workout-btn:active {
   background: rgba(76, 175, 80, 1);
+}
+
+/* Add placeholder styling */
+.set-input::placeholder {
+  color: #888;
+  opacity: 0.7;
+}
+
+.set-input:focus::placeholder {
+  color: #ccc;
+}
+
+/* Ensure inputs look good */
+.set-input {
+  color: #000; /* Black text for user-entered values */
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.set-input:focus {
+  background: rgba(255, 255, 255, 1);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
 }
 </style>
