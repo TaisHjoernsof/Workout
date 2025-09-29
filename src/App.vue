@@ -18,6 +18,11 @@
           Legs
         </button>
       </div>
+
+      <!-- Download Data Button -->
+      <button class="download-btn" @click="downloadWorkoutData">
+        📥 Download Workout Data
+      </button>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
@@ -245,6 +250,40 @@ export default {
       showScreen('choose')
     }
 
+    function downloadWorkoutData() {
+      // Get all saved workouts
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+      
+      if (workouts.length === 0) {
+        alert('No workout data found to download.')
+        return
+      }
+
+      // Get default settings too
+      const defaults = JSON.parse(localStorage.getItem('workoutDefaults') || '{}')
+      
+      // Create a comprehensive data object
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        workouts: workouts,
+        defaultSettings: defaults
+      }
+
+      // Create and download the file
+      const dataStr = JSON.stringify(exportData, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(dataBlob)
+      link.download = `workout-data-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+      
+      alert(`Downloaded ${workouts.length} workout sessions!`)
+    }
+
     onMounted(() => {
       loadDefaultData()
     })
@@ -256,7 +295,8 @@ export default {
       showScreen,
       updateExerciseData,
       updateSets,
-      saveWorkout
+      saveWorkout,
+      downloadWorkoutData
     }
   }
 }
