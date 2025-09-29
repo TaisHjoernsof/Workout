@@ -29,16 +29,18 @@
           <input 
             type="number" 
             class="set-input" 
-            placeholder="Reps" 
-            :value="getExerciseValue(exercise, 'reps', i-1)"
-            @change="$emit('update-exercise', workoutType, exercise, i-1, 'reps', $event.target.value)"
+            :placeholder="getDefaultValue(exercise, 'reps', i-1)"
+            :value="getCurrentValue(exercise, 'reps', i-1)"
+            @input="$emit('update-exercise', workoutType, exercise, i-1, 'reps', $event.target.value)"
+            @focus="clearIfDefault($event, getDefaultValue(exercise, 'reps', i-1))"
           >
           <input 
             type="number" 
             class="set-input" 
-            placeholder="Weight" 
-            :value="getExerciseValue(exercise, 'weight', i-1)"
-            @change="$emit('update-exercise', workoutType, exercise, i-1, 'weight', $event.target.value)"
+            :placeholder="getDefaultValue(exercise, 'weight', i-1)"
+            :value="getCurrentValue(exercise, 'weight', i-1)"
+            @input="$emit('update-exercise', workoutType, exercise, i-1, 'weight', $event.target.value)"
+            @focus="clearIfDefault($event, getDefaultValue(exercise, 'weight', i-1))"
           >
         </div>
       </div>
@@ -56,12 +58,26 @@ export default {
   },
   emits: ['update-exercise', 'update-sets'],
   methods: {
-    getExerciseValue(exercise, field, index) {
-      const exerciseData = this.workoutData[exercise]
+    getDefaultValue(exercise, field, index) {
+      return field === 'reps' ? '8' : '0';
+    },
+    
+    getCurrentValue(exercise, field, index) {
+      const exerciseData = this.workoutData[exercise];
       if (!exerciseData || !exerciseData[field]) {
-        return field === 'reps' ? 8 : 0
+        return '';
       }
-      return exerciseData[field][index] !== undefined ? exerciseData[field][index] : (field === 'reps' ? 8 : 0)
+      const value = exerciseData[field][index];
+      const defaultValue = field === 'reps' ? 8 : 0;
+      
+      // Return empty string if value is default (so placeholder shows)
+      return value === defaultValue ? '' : value.toString();
+    },
+    
+    clearIfDefault(event, defaultValue) {
+      if (event.target.value === '' || event.target.value === defaultValue) {
+        event.target.value = '';
+      }
     }
   }
 }
