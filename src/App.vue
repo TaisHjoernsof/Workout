@@ -115,7 +115,7 @@ export default {
         "DB - Shrug",
         "Lying Leg Raise",
         "Sit-Up",
-        "Twisting Sit-Up",
+        "DB - Russian Twist",
       ],
       legs: [
         "BB - Deadlift",

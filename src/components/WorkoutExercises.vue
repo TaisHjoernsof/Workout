@@ -1,4 +1,4 @@
-<template>
+<template> 
   <div>
     <div v-for="exercise in exercises" :key="exercise" class="exercise-panel">
       <div class="exercise-header">
@@ -24,7 +24,7 @@
           </div>
         </div>
       </div>
-      
+      <!-- TODO: Add videos to the rest of the exercises--> 
       <!-- Video Display -->
       <div v-if="showVideo[exercise] && hasVideo(exercise)" class="video-container">
         <video 
