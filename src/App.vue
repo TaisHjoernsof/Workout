@@ -195,6 +195,15 @@ export default {
     }
 
     function updateExerciseData(workoutType, exerciseName, setIndex, field, value) {
+      // Ensure the exercise data structure exists
+      if (!currentWorkoutData.value[workoutType][exerciseName]) {
+        currentWorkoutData.value[workoutType][exerciseName] = {
+          sets: 3,
+          reps: Array(3).fill(8),
+          weight: Array(3).fill(0)
+        }
+      }
+      
       const exerciseData = currentWorkoutData.value[workoutType][exerciseName];
       
       if (!exerciseData[field]) {
@@ -218,6 +227,15 @@ export default {
       newSetCount = parseInt(newSetCount)
       if (newSetCount < 1) newSetCount = 1
       if (newSetCount > 10) newSetCount = 10
+      
+      // Ensure the exercise data structure exists
+      if (!currentWorkoutData.value[workoutType][exerciseName]) {
+        currentWorkoutData.value[workoutType][exerciseName] = {
+          sets: 3,
+          reps: Array(3).fill(8),
+          weight: Array(3).fill(0)
+        }
+      }
       
       const exerciseData = currentWorkoutData.value[workoutType][exerciseName]
       const currentSets = exerciseData.sets || 3
