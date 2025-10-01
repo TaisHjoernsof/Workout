@@ -85,7 +85,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import WorkoutExercises from './components/WorkoutExercises.vue'
 
 export default {
@@ -95,6 +95,20 @@ export default {
   },
   setup() {
     const currentScreen = ref('choose')
+    let autoSaveInterval = null
+
+    const handleAppPause = () => {
+      if (currentScreen.value !== 'choose') {
+        console.log('App pausing, saving workout state...');
+        autoSaveWorkout();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleAppPause();
+      }
+    };
     
     const workoutExercises = {
       arms: [
@@ -202,6 +216,55 @@ export default {
       exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
     }
 
+    function autoSaveWorkout() {
+      // Don't auto-save on the choose screen
+      if (currentScreen.value === 'choose') return;
+      
+      const workoutType = currentScreen.value;
+      const autoSaveData = {
+        screen: currentScreen.value,
+        workoutType: workoutType,
+        data: JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType])),
+        timestamp: new Date().toISOString()
+      }
+      
+      localStorage.setItem('workoutAutoSave', JSON.stringify(autoSaveData));
+      console.log('Workout auto-saved');
+    }
+
+    function restoreAutoSavedWorkout() {
+      const saved = localStorage.getItem('workoutAutoSave');
+      if (saved) {
+        try {
+          const autoSaveData = JSON.parse(saved);
+          // Check if the auto-save is recent (within last hour)
+          const saveTime = new Date(autoSaveData.timestamp);
+          const now = new Date();
+          const hoursDiff = (now - saveTime) / (1000 * 60 * 60);
+          
+          if (hoursDiff < 1) { // Restore if less than 1 hour old
+            if (confirm('Found an unsaved workout from recently. Would you like to restore it?')) {
+              currentScreen.value = autoSaveData.screen;
+              currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
+            } else {
+              // Clear the auto-save if user doesn't want to restore
+              localStorage.removeItem('workoutAutoSave');
+            }
+          } else {
+            // Clear old auto-saves
+            localStorage.removeItem('workoutAutoSave');
+          }
+        } catch (e) {
+          console.error('Error restoring auto-saved workout:', e);
+          localStorage.removeItem('workoutAutoSave');
+        }
+      }
+    }
+
+    function clearAutoSave() {
+      localStorage.removeItem('workoutAutoSave');
+    }
+
     function updateSets(workoutType, exerciseName, newSetCount) {
       newSetCount = parseInt(newSetCount)
       if (newSetCount < 1) newSetCount = 1
@@ -227,28 +290,31 @@ export default {
     }
 
     function saveWorkout(workoutType) {
-      const workoutName = {
-        arms: 'Arms & Shoulders',
-        chest: 'Chest & Core',
-        legs: 'Legs'
-      }[workoutType]
-      
-      const workout = {
-        date: new Date().toISOString(),
-        type: workoutName,
-        exercises: currentWorkoutData.value[workoutType]
-      }
-      
-      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
-      workouts.push(workout)
-      localStorage.setItem('workouts', JSON.stringify(workouts))
-      
-      defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
-      saveDefaultData()
-      
-      alert('Workout saved! Your settings are remembered for next time.')
-      showScreen('choose')
-    }
+          const workoutName = {
+            arms: 'Arms & Shoulders',
+            chest: 'Chest & Core', 
+            legs: 'Legs'
+          }[workoutType]
+          
+          const workout = {
+            date: new Date().toISOString(),
+            type: workoutName,
+            exercises: currentWorkoutData.value[workoutType]
+          }
+          
+          const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+          workouts.push(workout)
+          localStorage.setItem('workouts', JSON.stringify(workouts))
+          
+          defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
+          saveDefaultData()
+          
+          // Clear auto-save when workout is properly saved
+          clearAutoSave()
+          
+          alert('Workout saved! Your settings are remembered for next time.')
+          showScreen('choose')
+        }
 
     function downloadWorkoutData() {
       // Get all saved workouts
@@ -286,7 +352,41 @@ export default {
 
     onMounted(() => {
       loadDefaultData()
+      restoreAutoSavedWorkout();
+
+      // Set up auto-save every 30 seconds
+      autoSaveInterval = setInterval(autoSaveWorkout, 30000);
+      
+      // Also save when the page is about to be hidden
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      // Listen for page unload (closing/refreshing)
+      window.addEventListener('beforeunload', handleAppPause);
+      
+      // iOS specific: listen for pagehide event
+      window.addEventListener('pagehide', handleAppPause);
     })
+
+    onUnmounted(() => {
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleAppPause);
+      window.removeEventListener('pagehide', handleAppPause);
+    })
+
+     function handleVisibilityChange() {
+      if (document.hidden) {
+        // Page is being hidden, save immediately
+        autoSaveWorkout();
+      }
+    }
+
+    function handleBeforeUnload() {
+      // Save when the page is about to unload
+      autoSaveWorkout();
+    }
 
     return {
       currentScreen,
@@ -296,7 +396,8 @@ export default {
       updateExerciseData,
       updateSets,
       saveWorkout,
-      downloadWorkoutData
+      downloadWorkoutData,
+      clearAutoSave // make it available in template if needed
     }
   }
 }
