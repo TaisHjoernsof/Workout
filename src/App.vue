@@ -1,3 +1,92 @@
+<template>
+  <div id="app">
+    <!-- Screen 1: Workout Selection -->
+    <div v-if="currentScreen === 'choose'" class="screen active">
+      <div class="header">
+        <h1>Choose Workout</h1>
+        <p>Select your focus area</p>
+      </div>
+      
+      <div class="workout-buttons">
+        <button class="workout-btn" @click="showScreen('arms')">
+          Arms & Shoulders
+        </button>
+        <button class="workout-btn" @click="showScreen('chest')">
+          Chest & Core
+        </button>
+        <button class="workout-btn" @click="showScreen('legs')">
+          Legs
+        </button>
+      </div>
+
+      <!-- Download Data Button -->
+      <button class="download-btn" @click="downloadWorkoutData">
+        📥 Download Workout Data
+      </button>
+    </div>
+
+    <!-- Screen 2: Arms & Shoulders Workout -->
+    <div v-if="currentScreen === 'arms'" class="screen active">
+      <div class="header">
+        <h1>Arms & Shoulders</h1>
+        <p>Track your sets and reps</p>
+      </div>
+      
+      <WorkoutExercises 
+        workout-type="arms"
+        :exercises="workoutExercises.arms"
+        :workout-data="currentWorkoutData.arms"
+        @update-exercise="updateExerciseData"
+        @update-sets="updateSets"
+      />
+      
+      <button class="save-progress-btn" @click="autoSaveWorkout">💾 Save Progress</button>
+      <button class="save-workout-btn" @click="saveWorkout('arms')">Save Workout</button>
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
+    </div>
+
+    <!-- Screen 3: Chest & Core Workout -->
+    <div v-if="currentScreen === 'chest'" class="screen active">
+      <div class="header">
+        <h1>Chest & Core</h1>
+        <p>Track your sets and reps</p>
+      </div>
+      
+      <WorkoutExercises 
+        workout-type="chest"
+        :exercises="workoutExercises.chest"
+        :workout-data="currentWorkoutData.chest"
+        @update-exercise="updateExerciseData"
+        @update-sets="updateSets"
+      />
+      
+      <button class="save-progress-btn" @click="autoSaveWorkout">💾 Save Progress</button>
+      <button class="save-workout-btn" @click="saveWorkout('chest')">Save Workout</button>
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
+    </div>
+
+    <!-- Screen 4: Legs Workout -->
+    <div v-if="currentScreen === 'legs'" class="screen active">
+      <div class="header">
+        <h1>Legs</h1>
+        <p>Track your sets and reps</p>
+      </div>
+      
+      <WorkoutExercises 
+        workout-type="legs"
+        :exercises="workoutExercises.legs"
+        :workout-data="currentWorkoutData.legs"
+        @update-exercise="updateExerciseData"
+        @update-sets="updateSets"
+      />
+      
+      <button class="save-progress-btn" @click="autoSaveWorkout">💾 Save Progress</button>
+      <button class="save-workout-btn" @click="saveWorkout('legs')">Save Workout</button>
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
+    </div>
+  </div>
+</template>
+
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
 import WorkoutExercises from './components/WorkoutExercises.vue'
@@ -8,22 +97,8 @@ export default {
     WorkoutExercises
   },
   setup() {
-    
     const currentScreen = ref('choose')
     let autoSaveInterval = null
-
-    const handleAppPause = () => {
-      if (currentScreen.value !== 'choose') {
-        console.log('App pausing, saving workout state...');
-        autoSaveWorkout();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        handleAppPause();
-      }
-    };
     
     const workoutExercises = {
       arms: [
@@ -71,6 +146,9 @@ export default {
       currentScreen.value = screen
       if (screen !== 'choose') {
         loadWorkoutData(screen)
+      } else {
+        // Clear auto-save when going back to choose screen intentionally
+        clearAutoSave()
       }
     }
 
@@ -129,55 +207,11 @@ export default {
       }
       
       exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
-    }
-
-    function autoSaveWorkout() {
-      // Don't auto-save on the choose screen
-      if (currentScreen.value === 'choose') return;
       
-      const workoutType = currentScreen.value;
-      const autoSaveData = {
-        screen: currentScreen.value,
-        workoutType: workoutType,
-        data: JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType])),
-        timestamp: new Date().toISOString()
-      }
-      
-      localStorage.setItem('workoutAutoSave', JSON.stringify(autoSaveData));
-      console.log('Workout auto-saved');
-    }
-
-    function restoreAutoSavedWorkout() {
-      const saved = localStorage.getItem('workoutAutoSave');
-      if (saved) {
-        try {
-          const autoSaveData = JSON.parse(saved);
-          // Check if the auto-save is recent (within last hour)
-          const saveTime = new Date(autoSaveData.timestamp);
-          const now = new Date();
-          const hoursDiff = (now - saveTime) / (1000 * 60 * 60);
-          
-          if (hoursDiff < 1) { // Restore if less than 1 hour old
-            if (confirm('Found an unsaved workout from recently. Would you like to restore it?')) {
-              currentScreen.value = autoSaveData.screen;
-              currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
-            } else {
-              // Clear the auto-save if user doesn't want to restore
-              localStorage.removeItem('workoutAutoSave');
-            }
-          } else {
-            // Clear old auto-saves
-            localStorage.removeItem('workoutAutoSave');
-          }
-        } catch (e) {
-          console.error('Error restoring auto-saved workout:', e);
-          localStorage.removeItem('workoutAutoSave');
-        }
-      }
-    }
-
-    function clearAutoSave() {
-      localStorage.removeItem('workoutAutoSave');
+      // Auto-save immediately after each change (with small delay to avoid excessive saves)
+      setTimeout(() => {
+        autoSaveWorkout();
+      }, 500);
     }
 
     function updateSets(workoutType, exerciseName, newSetCount) {
@@ -202,34 +236,101 @@ export default {
       }
       
       exerciseData.sets = newSetCount
+      
+      // Auto-save after set count change
+      setTimeout(() => {
+        autoSaveWorkout();
+      }, 500);
+    }
+
+    function autoSaveWorkout() {
+      // Don't auto-save on the choose screen
+      if (currentScreen.value === 'choose') return;
+      
+      const workoutType = currentScreen.value;
+      const autoSaveData = {
+        screen: currentScreen.value,
+        workoutType: workoutType,
+        data: JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType])),
+        timestamp: new Date().toISOString()
+      }
+      
+      localStorage.setItem('workoutAutoSave', JSON.stringify(autoSaveData));
+      console.log('Workout auto-saved');
+    }
+
+    function restoreAutoSavedWorkout() {
+      const saved = localStorage.getItem('workoutAutoSave');
+      if (saved) {
+        try {
+          const autoSaveData = JSON.parse(saved);
+          // Check if the auto-save is recent (within last 2 hours)
+          const saveTime = new Date(autoSaveData.timestamp);
+          const now = new Date();
+          const hoursDiff = (now - saveTime) / (1000 * 60 * 60);
+          
+          if (hoursDiff < 2) { // Restore if less than 2 hours old
+            if (confirm('Found an unsaved workout from recently. Would you like to restore it?')) {
+              currentScreen.value = autoSaveData.screen;
+              currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
+            } else {
+              // Clear the auto-save if user doesn't want to restore
+              clearAutoSave();
+            }
+          } else {
+            // Clear old auto-saves
+            clearAutoSave();
+          }
+        } catch (e) {
+          console.error('Error restoring auto-saved workout:', e);
+          clearAutoSave();
+        }
+      }
+    }
+
+    function clearAutoSave() {
+      localStorage.removeItem('workoutAutoSave');
+    }
+
+    function handleAppPause() {
+      if (currentScreen.value !== 'choose') {
+        console.log('App pausing, saving workout state...');
+        autoSaveWorkout();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        handleAppPause();
+      }
     }
 
     function saveWorkout(workoutType) {
-          const workoutName = {
-            arms: 'Arms & Shoulders',
-            chest: 'Chest & Core', 
-            legs: 'Legs'
-          }[workoutType]
-          
-          const workout = {
-            date: new Date().toISOString(),
-            type: workoutName,
-            exercises: currentWorkoutData.value[workoutType]
-          }
-          
-          const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
-          workouts.push(workout)
-          localStorage.setItem('workouts', JSON.stringify(workouts))
-          
-          defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
-          saveDefaultData()
-          
-          // Clear auto-save when workout is properly saved
-          clearAutoSave()
-          
-          alert('Workout saved! Your settings are remembered for next time.')
-          showScreen('choose')
-        }
+      const workoutName = {
+        arms: 'Arms & Shoulders',
+        chest: 'Chest & Core',
+        legs: 'Legs'
+      }[workoutType]
+      
+      const workout = {
+        date: new Date().toISOString(),
+        type: workoutName,
+        exercises: currentWorkoutData.value[workoutType]
+      }
+      
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+      workouts.push(workout)
+      localStorage.setItem('workouts', JSON.stringify(workouts))
+      
+      defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
+      saveDefaultData()
+      
+      // Clear auto-save when workout is properly saved
+      clearAutoSave()
+      
+      alert('Workout saved! Your settings are remembered for next time.')
+      showScreen('choose')
+    }
 
     function downloadWorkoutData() {
       // Get all saved workouts
@@ -265,51 +366,31 @@ export default {
       alert(`Downloaded ${workouts.length} workout sessions!`)
     }
 
-
-    // Listen for page visibility changes
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        handleAppPause();
-      }
-    };
-
     onMounted(() => {
       loadDefaultData()
-      restoreAutoSavedWorkout();
-
-      // Set up auto-save every 30 seconds
-      autoSaveInterval = setInterval(autoSaveWorkout, 30000);
+      restoreAutoSavedWorkout()
       
-      // Also save when the page is about to be hidden
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('beforeunload', handleBeforeUnload);
+      // Set up auto-save every 30 seconds
+      autoSaveInterval = setInterval(autoSaveWorkout, 30000)
+      
+      // Listen for page visibility changes (for mobile apps/tab switching)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      
       // Listen for page unload (closing/refreshing)
-      window.addEventListener('beforeunload', handleAppPause);
+      window.addEventListener('beforeunload', handleAppPause)
       
       // iOS specific: listen for pagehide event
-      window.addEventListener('pagehide', handleAppPause);
+      window.addEventListener('pagehide', handleAppPause)
     })
 
     onUnmounted(() => {
       if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
+        clearInterval(autoSaveInterval)
       }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleAppPause);
-      window.removeEventListener('pagehide', handleAppPause);
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', handleAppPause)
+      window.removeEventListener('pagehide', handleAppPause)
     })
-
-     function handleVisibilityChange() {
-      if (document.hidden) {
-        // Page is being hidden, save immediately
-        autoSaveWorkout();
-      }
-    }
-
-    function handleBeforeUnload() {
-      // Save when the page is about to unload
-      autoSaveWorkout();
-    }
 
     return {
       currentScreen,
@@ -320,15 +401,14 @@ export default {
       updateSets,
       saveWorkout,
       downloadWorkoutData,
-      clearAutoSave // make it available in template if needed
+      autoSaveWorkout,
+      clearAutoSave
     }
-
   }
 }
 </script>
 
 <style>
-/* Copy all your existing CSS styles here */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -342,7 +422,8 @@ body {
   padding: 20px;
   color: white;
 }
-/* Add to your existing CSS */
+
+/* Prevent zoom on focus */
 input, select, textarea {
   font-size: 16px; /* Prevents iOS zoom */
   transform: scale(1); /* Ensure no scaling */
@@ -507,6 +588,40 @@ input, select, textarea {
   background: rgba(76, 175, 80, 1);
 }
 
+.save-progress-btn {
+  background: rgba(255, 193, 7, 0.8);
+  border: none;
+  border-radius: 10px;
+  padding: 15px;
+  color: white;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.save-progress-btn:active {
+  background: rgba(255, 193, 7, 1);
+}
+
+.download-btn {
+  background: rgba(156, 39, 176, 0.8);
+  border: none;
+  border-radius: 10px;
+  padding: 15px;
+  color: white;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.download-btn:active {
+  background: rgba(156, 39, 176, 1);
+}
+
 /* Add placeholder styling */
 .set-input::placeholder {
   color: #888;
@@ -529,7 +644,6 @@ input, select, textarea {
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
 }
 
-/* Add to your existing CSS in App.vue */
 .exercise-controls {
   display: flex;
   align-items: center;
