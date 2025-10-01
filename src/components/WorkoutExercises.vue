@@ -59,6 +59,7 @@
             type="number" 
             class="set-input" 
             :value="getCurrentValue(exercise, 'reps', i-1)"
+            :placeholder="getDefaultValue(exercise, 'reps', i-1)"
             @input="handleInputChange($event, workoutType, exercise, i-1, 'reps')"
             @focus="handleFocus($event, 'reps')"
             @blur="handleBlur($event, 'reps')"
@@ -67,6 +68,7 @@
             type="number" 
             class="set-input" 
             :value="getCurrentValue(exercise, 'weight', i-1)"
+            :placeholder="getDefaultValue(exercise, 'weight', i-1)"
             @input="handleInputChange($event, workoutType, exercise, i-1, 'weight')"
             @focus="handleFocus($event, 'weight')"
             @blur="handleBlur($event, 'weight')"
@@ -83,7 +85,8 @@ export default {
   props: {
     workoutType: String,
     exercises: Array,
-    workoutData: Object
+    workoutData: Object,
+    defaultData: Object
   },
   emits: ['update-exercise', 'update-sets'],
   data() {
@@ -97,35 +100,45 @@ export default {
     getCurrentValue(exercise, field, index) {
       const exerciseData = this.workoutData[exercise];
       if (!exerciseData || !exerciseData[field]) {
-        return field === 'reps' ? 8 : 0;
+        return '';
       }
       const value = exerciseData[field][index];
       
-      // Return the actual value, or default if undefined/null
+      // Return empty string for null values (user hasn't entered data yet)
       if (value === null || value === undefined) {
-        return field === 'reps' ? 8 : 0;
+        return '';
       }
       
-      return value;
+      return value.toString();
+    },
+    
+    getDefaultValue(exercise, field, index) {
+      const exerciseData = this.defaultData[exercise];
+      if (!exerciseData || !exerciseData[field]) {
+        return field === 'reps' ? '8' : '0';
+      }
+      const value = exerciseData[field][index];
+      const defaultValue = field === 'reps' ? 8 : 0;
+      
+      return (value === null || value === undefined) ? defaultValue.toString() : value.toString();
     },
     
     handleFocus(event, field) {
       this.focusedInputs.add(event.target);
-      const defaultValue = field === 'reps' ? 8 : 0;
-      // Only clear if the current value is the default
-      if (parseInt(event.target.value) === defaultValue) {
+      // Only clear if the current value is empty (user hasn't entered data)
+      if (event.target.value === '') {
         event.target.value = '';
       }
     },
     
     handleBlur(event, field) {
       this.focusedInputs.delete(event.target);
-      // If empty after blur, set to default
+      // If empty after blur, keep it empty (will show placeholder)
       if (event.target.value === '') {
-        const defaultValue = field === 'reps' ? 8 : 0;
-        event.target.value = defaultValue;
-        this.$emit('update-exercise', this.workoutType, event.target.getAttribute('data-exercise'), 
-                  parseInt(event.target.getAttribute('data-index')), field, defaultValue);
+        // Emit null to indicate no user input
+        const exercise = event.target.getAttribute('data-exercise');
+        const setIndex = parseInt(event.target.getAttribute('data-index'));
+        this.$emit('update-exercise', this.workoutType, exercise, setIndex, field, null);
       }
     },
     

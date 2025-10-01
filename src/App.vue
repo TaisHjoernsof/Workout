@@ -36,6 +36,7 @@
         workout-type="arms"
         :exercises="workoutExercises.arms"
         :workout-data="currentWorkoutData.arms"
+        :default-data="defaultWorkoutData.arms"
         @update-exercise="updateExerciseData"
         @update-sets="updateSets"
       />
@@ -56,6 +57,7 @@
         workout-type="chest"
         :exercises="workoutExercises.chest"
         :workout-data="currentWorkoutData.chest"
+        :default-data="defaultWorkoutData.chest"
         @update-exercise="updateExerciseData"
         @update-sets="updateSets"
       />
@@ -76,6 +78,7 @@
         workout-type="legs"
         :exercises="workoutExercises.legs"
         :workout-data="currentWorkoutData.legs"
+        :default-data="defaultWorkoutData.legs"
         @update-exercise="updateExerciseData"
         @update-sets="updateSets"
       />
@@ -142,9 +145,13 @@ export default {
       legs: {}
     })
 
+    // Track if we're starting a fresh workout or restoring auto-save
+    const isFreshWorkout = ref(true)
+
     function showScreen(screen) {
       currentScreen.value = screen
       if (screen !== 'choose') {
+        isFreshWorkout.value = true // Assume fresh workout until we check for auto-save
         loadWorkoutData(screen)
       } else {
         // Clear auto-save when going back to choose screen intentionally
@@ -169,7 +176,8 @@ export default {
           })
         })
         
-        currentWorkoutData.value = JSON.parse(JSON.stringify(defaultWorkoutData.value))
+        // For fresh workouts, start with empty current data (showing defaults as placeholders)
+        resetCurrentWorkoutData()
         saveDefaultData()
       } else {
         Object.keys(workoutExercises).forEach(workoutType => {
@@ -181,9 +189,23 @@ export default {
             }
           })
         })
-        currentWorkoutData.value = JSON.parse(JSON.stringify(defaultWorkoutData.value))
+        resetCurrentWorkoutData()
         saveDefaultData()
       }
+    }
+
+    function resetCurrentWorkoutData() {
+      // Reset current data to empty structures (will show defaults as placeholders)
+      Object.keys(workoutExercises).forEach(workoutType => {
+        currentWorkoutData.value[workoutType] = {}
+        workoutExercises[workoutType].forEach(exercise => {
+          currentWorkoutData.value[workoutType][exercise] = {
+            sets: defaultWorkoutData.value[workoutType][exercise].sets,
+            reps: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
+            weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null)
+          }
+        })
+      })
     }
 
     function saveDefaultData() {
@@ -191,16 +213,27 @@ export default {
     }
 
     function loadWorkoutData(workoutType) {
-      currentWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(defaultWorkoutData.value[workoutType]))
+      // Start with fresh workout data (showing defaults as placeholders)
+      currentWorkoutData.value[workoutType] = {}
+      workoutExercises[workoutType].forEach(exercise => {
+        currentWorkoutData.value[workoutType][exercise] = {
+          sets: defaultWorkoutData.value[workoutType][exercise].sets,
+          reps: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
+          weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null)
+        }
+      })
     }
 
     function updateExerciseData(workoutType, exerciseName, setIndex, field, value) {
+      // Mark that we're no longer in a fresh workout (user is entering data)
+      isFreshWorkout.value = false
+      
       // Ensure the exercise data structure exists
       if (!currentWorkoutData.value[workoutType][exerciseName]) {
         currentWorkoutData.value[workoutType][exerciseName] = {
           sets: 3,
-          reps: Array(3).fill(8),
-          weight: Array(3).fill(0)
+          reps: Array(3).fill(null),
+          weight: Array(3).fill(null)
         }
       }
       
@@ -210,12 +243,12 @@ export default {
         exerciseData[field] = [];
       }
       
-      // Handle empty values - set to default
+      // Handle empty values - set to null to indicate no user input
       if (value === '' || value === null || value === undefined) {
-        value = field === 'reps' ? 8 : 0;
+        exerciseData[field][setIndex] = null;
+      } else {
+        exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
       }
-      
-      exerciseData[field][setIndex] = field === 'reps' || field === 'weight' ? parseInt(value) || 0 : value;
       
       // Auto-save immediately after each change (with small delay to avoid excessive saves)
       setTimeout(() => {
@@ -224,6 +257,7 @@ export default {
     }
 
     function updateSets(workoutType, exerciseName, newSetCount) {
+      isFreshWorkout.value = false
       newSetCount = parseInt(newSetCount)
       if (newSetCount < 1) newSetCount = 1
       if (newSetCount > 10) newSetCount = 10
@@ -232,21 +266,21 @@ export default {
       if (!currentWorkoutData.value[workoutType][exerciseName]) {
         currentWorkoutData.value[workoutType][exerciseName] = {
           sets: 3,
-          reps: Array(3).fill(8),
-          weight: Array(3).fill(0)
+          reps: Array(3).fill(null),
+          weight: Array(3).fill(null)
         }
       }
       
       const exerciseData = currentWorkoutData.value[workoutType][exerciseName]
       const currentSets = exerciseData.sets || 3
       
-      if (!exerciseData.reps) exerciseData.reps = Array(currentSets).fill(8)
-      if (!exerciseData.weight) exerciseData.weight = Array(currentSets).fill(0)
+      if (!exerciseData.reps) exerciseData.reps = Array(currentSets).fill(null)
+      if (!exerciseData.weight) exerciseData.weight = Array(currentSets).fill(null)
       
       if (newSetCount > currentSets) {
         for (let i = currentSets; i < newSetCount; i++) {
-          exerciseData.reps[i] = 8
-          exerciseData.weight[i] = 0
+          exerciseData.reps[i] = null
+          exerciseData.weight[i] = null
         }
       } else if (newSetCount < currentSets) {
         exerciseData.reps = exerciseData.reps.slice(0, newSetCount)
@@ -270,7 +304,8 @@ export default {
         screen: currentScreen.value,
         workoutType: workoutType,
         data: JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType])),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        isFreshWorkout: isFreshWorkout.value
       }
       
       localStorage.setItem('workoutAutoSave', JSON.stringify(autoSaveData));
@@ -291,6 +326,7 @@ export default {
             if (confirm('Found an unsaved workout from recently. Would you like to restore it?')) {
               currentScreen.value = autoSaveData.screen;
               currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
+              isFreshWorkout.value = autoSaveData.isFreshWorkout || false;
             } else {
               // Clear the auto-save if user doesn't want to restore
               clearAutoSave();
@@ -340,6 +376,7 @@ export default {
       workouts.push(workout)
       localStorage.setItem('workouts', JSON.stringify(workouts))
       
+      // Update default data with the completed workout (for placeholders next time)
       defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
       saveDefaultData()
       
@@ -414,6 +451,7 @@ export default {
       currentScreen,
       workoutExercises,
       currentWorkoutData,
+      defaultWorkoutData,
       showScreen,
       updateExerciseData,
       updateSets,
