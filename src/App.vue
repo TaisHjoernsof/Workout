@@ -1,89 +1,3 @@
-<template>
-  <div id="app">
-    <!-- Screen 1: Workout Selection -->
-    <div v-if="currentScreen === 'choose'" class="screen active">
-      <div class="header">
-        <h1>Choose Workout</h1>
-        <p>Select your focus area</p>
-      </div>
-      
-      <div class="workout-buttons">
-        <button class="workout-btn" @click="showScreen('arms')">
-          Arms & Shoulders
-        </button>
-        <button class="workout-btn" @click="showScreen('chest')">
-          Chest & Core
-        </button>
-        <button class="workout-btn" @click="showScreen('legs')">
-          Legs
-        </button>
-      </div>
-
-      <!-- Download Data Button -->
-      <button class="download-btn" @click="downloadWorkoutData">
-        📥 Download Workout Data
-      </button>
-    </div>
-
-    <!-- Screen 2: Arms & Shoulders Workout -->
-    <div v-if="currentScreen === 'arms'" class="screen active">
-      <div class="header">
-        <h1>Arms & Shoulders</h1>
-        <p>Track your sets and reps</p>
-      </div>
-      
-      <WorkoutExercises 
-        workout-type="arms"
-        :exercises="workoutExercises.arms"
-        :workout-data="currentWorkoutData.arms"
-        @update-exercise="updateExerciseData"
-        @update-sets="updateSets"
-      />
-      
-      <button class="save-workout-btn" @click="saveWorkout('arms')">Save Workout</button>
-      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
-    </div>
-
-    <!-- Screen 3: Chest & Core Workout -->
-    <div v-if="currentScreen === 'chest'" class="screen active">
-      <div class="header">
-        <h1>Chest & Core</h1>
-        <p>Track your sets and reps</p>
-      </div>
-      
-      <WorkoutExercises 
-        workout-type="chest"
-        :exercises="workoutExercises.chest"
-        :workout-data="currentWorkoutData.chest"
-        @update-exercise="updateExerciseData"
-        @update-sets="updateSets"
-      />
-      
-      <button class="save-workout-btn" @click="saveWorkout('chest')">Save Workout</button>
-      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
-    </div>
-
-    <!-- Screen 4: Legs Workout -->
-    <div v-if="currentScreen === 'legs'" class="screen active">
-      <div class="header">
-        <h1>Legs</h1>
-        <p>Track your sets and reps</p>
-      </div>
-      
-      <WorkoutExercises 
-        workout-type="legs"
-        :exercises="workoutExercises.legs"
-        :workout-data="currentWorkoutData.legs"
-        @update-exercise="updateExerciseData"
-        @update-sets="updateSets"
-      />
-      
-      <button class="save-workout-btn" @click="saveWorkout('legs')">Save Workout</button>
-      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
-    </div>
-  </div>
-</template>
-
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
 import WorkoutExercises from './components/WorkoutExercises.vue'
@@ -94,6 +8,7 @@ export default {
     WorkoutExercises
   },
   setup() {
+    
     const currentScreen = ref('choose')
     let autoSaveInterval = null
 
@@ -350,6 +265,14 @@ export default {
       alert(`Downloaded ${workouts.length} workout sessions!`)
     }
 
+
+    // Listen for page visibility changes
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleAppPause();
+      }
+    };
+
     onMounted(() => {
       loadDefaultData()
       restoreAutoSavedWorkout();
@@ -399,6 +322,7 @@ export default {
       downloadWorkoutData,
       clearAutoSave // make it available in template if needed
     }
+
   }
 }
 </script>
