@@ -823,7 +823,7 @@ input, select, textarea {
 /* Streak Counter */
 .streak-counter {
   position: fixed;
-  top: 40px;
+  top: 60px;
   right: 20px;
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
