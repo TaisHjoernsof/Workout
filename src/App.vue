@@ -3,7 +3,6 @@
     <!-- Streak Counter -->
     <div v-if="currentScreen === 'choose'" class="streak-counter" :class="{ 'incomplete': !todayCompleted }">
       🔥 {{ streak }}
-      <div v-if="!todayCompleted" class="streak-hint">Complete today!</div>
     </div>
 
     <!-- Screen 1: Workout Selection -->
@@ -39,16 +38,6 @@
       <button class="download-btn" @click="downloadWorkoutData">
         📥 Download Workout Data
       </button>
-
-      <!-- Streak Status Message -->
-      <div v-if="streak > 0" class="streak-status">
-        <div v-if="todayCompleted" class="status-completed">
-          ✅ Streak maintained! You're on fire! 🔥
-        </div>
-        <div v-else class="status-pending">
-          ⏳ Current streak: {{ streak }} days. Complete a workout or rest day to continue!
-        </div>
-      </div>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
