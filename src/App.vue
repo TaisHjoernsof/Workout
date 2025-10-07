@@ -1,8 +1,9 @@
 <template>
   <div id="app">
     <!-- Streak Counter -->
-    <div v-if="currentScreen === 'choose'" class="streak-counter">
+    <div v-if="currentScreen === 'choose'" class="streak-counter" :class="{ 'incomplete': !todayCompleted }">
       🔥 {{ streak }}
+      <div v-if="!todayCompleted" class="streak-hint">Complete today!</div>
     </div>
 
     <!-- Screen 1: Workout Selection -->
@@ -31,13 +32,23 @@
         @click="logRestDay"
         :disabled="!restDayEnabled"
       >
-        Rest Day
+        {{ todayCompleted ? '✅ Today Completed' : 'Rest Day' }}
       </button>
 
       <!-- Download Data Button -->
       <button class="download-btn" @click="downloadWorkoutData">
         📥 Download Workout Data
       </button>
+
+      <!-- Streak Status Message -->
+      <div v-if="streak > 0" class="streak-status">
+        <div v-if="todayCompleted" class="status-completed">
+          ✅ Streak maintained! You're on fire! 🔥
+        </div>
+        <div v-else class="status-pending">
+          ⏳ Current streak: {{ streak }} days. Complete a workout or rest day to continue!
+        </div>
+      </div>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
@@ -162,6 +173,7 @@ export default {
 
     // Streak and rest day functionality
     const streak = ref(0)
+    const todayCompleted = ref(false)
     const restDayEnabled = ref(false)
 
     // Track if we're starting a fresh workout or restoring auto-save
@@ -177,6 +189,7 @@ export default {
         clearAutoSave()
         // Update streak and rest day button when returning to choose screen
         updateStreak()
+        updateTodayStatus()
         updateRestDayButton()
       }
     }
@@ -407,6 +420,7 @@ export default {
 
       // Update streak after saving workout
       updateStreak()
+      updateTodayStatus()
       updateRestDayButton()
       
       alert('Workout saved! Your settings are remembered for next time.')
@@ -429,26 +443,10 @@ export default {
         ...restDays.map(rd => ({ date: rd, type: 'rest' }))
       ].sort((a, b) => new Date(b.date) - new Date(a.date))
       
-      // If no activity today, check if we should break the streak
-      const today = new Date().toDateString()
-      const todayActivity = allActivity.find(a => new Date(a.date).toDateString() === today)
-      
-      if (!todayActivity) {
-        // Check if yesterday had activity to continue streak
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        const yesterdayStr = yesterday.toDateString()
-        const yesterdayActivity = allActivity.find(a => new Date(a.date).toDateString() === yesterdayStr)
-        
-        if (!yesterdayActivity) {
-          streak.value = 0
-          return
-        }
-      }
-      
-      // Calculate consecutive days
+      // Calculate consecutive days up to YESTERDAY (regardless of today's activity)
       let currentStreak = 0
       let currentDate = new Date()
+      currentDate.setDate(currentDate.getDate() - 1) // Start from yesterday
       
       while (true) {
         const dateStr = currentDate.toDateString()
@@ -460,36 +458,30 @@ export default {
         } else {
           break
         }
+        
+        // Stop if we go too far back (safety limit)
+        if (currentStreak > 365) break
       }
       
       streak.value = currentStreak
     }
 
-    function updateRestDayButton() {
-      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
-      
-      // Check if user has workouts for the last 3 consecutive days
-      let consecutiveDays = 0
-      let currentDate = new Date()
-      
-      for (let i = 0; i < 3; i++) {
-        const dateStr = currentDate.toDateString()
-        const hasWorkout = workouts.find(w => new Date(w.date).toDateString() === dateStr)
-        
-        if (hasWorkout) {
-          consecutiveDays++
-          currentDate.setDate(currentDate.getDate() - 1)
-        } else {
-          break
-        }
-      }
-      
-      // Also check if today already has a rest day
-      const restDays = JSON.parse(localStorage.getItem('restDays') || '[]')
+    function updateTodayStatus() {
       const today = new Date().toDateString()
-      const todayHasRestDay = restDays.find(rd => new Date(rd).toDateString() === today)
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+      const restDays = JSON.parse(localStorage.getItem('restDays') || '[]')
       
-      restDayEnabled.value = consecutiveDays >= 3 && !todayHasRestDay
+      const todayWorkout = workouts.find(w => new Date(w.date).toDateString() === today)
+      const todayRestDay = restDays.find(rd => new Date(rd).toDateString() === today)
+      
+      todayCompleted.value = !!(todayWorkout || todayRestDay)
+    }
+
+    function updateRestDayButton() {
+      // Enable rest day button if:
+      // 1. User has at least 3 consecutive days of activity (streak >= 3)
+      // 2. AND today is not already completed
+      restDayEnabled.value = streak.value >= 3 && !todayCompleted.value
     }
 
     function logRestDay() {
@@ -498,7 +490,7 @@ export default {
       const today = new Date().toISOString()
       const restDays = JSON.parse(localStorage.getItem('restDays') || '[]')
       
-      // Check if today already has a rest day
+      // Check if today already has a rest day (shouldn't happen due to enabled check, but just in case)
       const todayStr = new Date().toDateString()
       const todayHasRestDay = restDays.find(rd => new Date(rd).toDateString() === todayStr)
       
@@ -508,6 +500,7 @@ export default {
         
         // Update streak and button state
         updateStreak()
+        updateTodayStatus()
         updateRestDayButton()
         
         alert('Rest day logged! Your streak continues. 💪')
@@ -555,6 +548,7 @@ export default {
       loadDefaultData()
       restoreAutoSavedWorkout()
       updateStreak()
+      updateTodayStatus()
       updateRestDayButton()
       
       // Set up auto-save every 30 seconds
@@ -585,6 +579,7 @@ export default {
       currentWorkoutData,
       defaultWorkoutData,
       streak,
+      todayCompleted,
       restDayEnabled,
       showScreen,
       updateExerciseData,
@@ -848,6 +843,41 @@ input, select, textarea {
   font-size: 1.2em;
   font-weight: 700;
   z-index: 1000;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.streak-counter.incomplete {
+  background: rgba(255, 193, 7, 0.3);
+  border: 2px solid rgba(255, 193, 7, 0.5);
+}
+
+.streak-hint {
+  font-size: 0.7em;
+  font-weight: 400;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+/* Streak Status Message */
+.streak-status {
+  margin-top: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 0.9em;
+}
+
+.status-completed {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.status-pending {
+  color: #ffc107;
+  font-weight: 600;
 }
 
 /* Add placeholder styling */
