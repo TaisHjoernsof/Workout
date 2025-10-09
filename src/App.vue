@@ -3,6 +3,7 @@
     <!-- Streak Counter -->
     <div v-if="currentScreen === 'choose'" class="streak-counter" :class="{ 'incomplete': !todayCompleted }">
       🔥 {{ streak }}
+      <div v-if="!todayCompleted" class="streak-hint">Complete today!</div>
     </div>
 
     <!-- Screen 1: Workout Selection -->
@@ -38,6 +39,16 @@
       <button class="download-btn" @click="downloadWorkoutData">
         📥 Download Workout Data
       </button>
+
+      <!-- Streak Status Message -->
+      <div v-if="streak > 0" class="streak-status">
+        <div v-if="todayCompleted" class="status-completed">
+          ✅ Streak maintained! You're on fire! 🔥
+        </div>
+        <div v-else class="status-pending">
+          ⏳ Current streak: {{ streak }} days. Complete a workout or rest day to continue!
+        </div>
+      </div>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
@@ -416,7 +427,7 @@ export default {
       showScreen('choose')
     }
 
-    // Streak functionality
+    // Streak functionality - FIXED VERSION
     function updateStreak() {
       const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
       const restDays = JSON.parse(localStorage.getItem('restDays') || '[]')
@@ -432,11 +443,30 @@ export default {
         ...restDays.map(rd => ({ date: rd, type: 'rest' }))
       ].sort((a, b) => new Date(b.date) - new Date(a.date))
       
-      // Calculate consecutive days up to YESTERDAY (regardless of today's activity)
+      // If no activity at all, streak is 0
+      if (allActivity.length === 0) {
+        streak.value = 0
+        return
+      }
+      
+      // Calculate consecutive days including today if completed, otherwise up to yesterday
       let currentStreak = 0
       let currentDate = new Date()
-      currentDate.setDate(currentDate.getDate() - 1) // Start from yesterday
       
+      // Check if today is completed
+      const todayStr = currentDate.toDateString()
+      const todayActivity = allActivity.find(a => new Date(a.date).toDateString() === todayStr)
+      
+      if (todayActivity) {
+        // If today has activity, include today in the streak count
+        currentStreak = 1
+        currentDate.setDate(currentDate.getDate() - 1) // Move to yesterday
+      } else {
+        // If today has no activity, start counting from yesterday
+        currentDate.setDate(currentDate.getDate() - 1)
+      }
+      
+      // Now count backwards for consecutive days
       while (true) {
         const dateStr = currentDate.toDateString()
         const hasActivity = allActivity.find(a => new Date(a.date).toDateString() === dateStr)
@@ -823,7 +853,7 @@ input, select, textarea {
 /* Streak Counter */
 .streak-counter {
   position: fixed;
-  top: 65px;
+  top: 20px;
   right: 20px;
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
