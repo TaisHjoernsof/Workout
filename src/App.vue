@@ -34,10 +34,28 @@
         {{ todayCompleted ? '✅ Today Completed' : 'Rest Day' }}
       </button>
 
-      <!-- Download Data Button -->
-      <button class="download-btn" @click="downloadWorkoutData">
-        📥 Download Workout Data
-      </button>
+      <!-- Import and Export Buttons -->
+      <div class="data-buttons">
+        <button class="import-btn" @click="triggerFileInput">
+          📤 Import Workout Data
+        </button>
+        <input 
+          type="file" 
+          ref="fileInput"
+          accept=".json" 
+          style="display: none" 
+          @change="handleFileImport"
+        >
+        
+        <button class="download-btn" @click="downloadWorkoutData">
+          📥 Download Workout Data
+        </button>
+      </div>
+
+      <!-- Import Status Message -->
+      <div v-if="importMessage" class="import-status" :class="{ 'error': importError }">
+        {{ importMessage }}
+      </div>
 
       <!-- Streak Status Message -->
       <div v-if="streak > 0" class="streak-status">
@@ -171,6 +189,11 @@ export default {
     const streak = ref(0)
     const todayCompleted = ref(false)
     const restDayEnabled = ref(false)
+
+    // Import functionality
+    const fileInput = ref(null)
+    const importMessage = ref('')
+    const importError = ref(false)
 
     // Track if we're starting a fresh workout or restoring auto-save
     const isFreshWorkout = ref(true)
@@ -522,6 +545,112 @@ export default {
       }
     }
 
+    // Import functionality
+    function triggerFileInput() {
+      fileInput.value.click()
+    }
+
+    function handleFileImport(event) {
+      const file = event.target.files[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const importedData = JSON.parse(e.target.result)
+          importWorkoutData(importedData)
+        } catch (error) {
+          showImportMessage('Error parsing JSON file. Please make sure it\'s a valid workout data file.', true)
+          console.error('Error parsing imported file:', error)
+        }
+      }
+      reader.readAsText(file)
+      
+      // Reset file input
+      event.target.value = ''
+    }
+
+    function importWorkoutData(importedData) {
+      // Validate the imported data structure
+      if (!importedData.workouts || !importedData.defaultSettings) {
+        showImportMessage('Invalid file format. Missing required data.', true)
+        return
+      }
+
+      // Ask for confirmation before importing
+      const workoutCount = importedData.workouts.length
+      const restDayCount = importedData.restDays ? importedData.restDays.length : 0
+      
+      if (!confirm(`This will import ${workoutCount} workout sessions and ${restDayCount} rest days. Your current data will be merged. Continue?`)) {
+        return
+      }
+
+      try {
+        // Get current data
+        const currentWorkouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+        const currentRestDays = JSON.parse(localStorage.getItem('restDays') || '[]')
+        const currentDefaults = JSON.parse(localStorage.getItem('workoutDefaults') || '{}')
+
+        // Merge workouts - avoid duplicates by date and type
+        const workoutMap = new Map()
+        
+        // Add current workouts to map
+        currentWorkouts.forEach(workout => {
+          const key = `${workout.date}-${workout.type}`
+          workoutMap.set(key, workout)
+        })
+        
+        // Add imported workouts (will overwrite duplicates)
+        importedData.workouts.forEach(workout => {
+          const key = `${workout.date}-${workout.type}`
+          workoutMap.set(key, workout)
+        })
+        
+        const mergedWorkouts = Array.from(workoutMap.values())
+        
+        // Merge rest days - avoid duplicates
+        const restDaySet = new Set([...currentRestDays, ...(importedData.restDays || [])])
+        const mergedRestDays = Array.from(restDaySet)
+        
+        // Merge default settings (imported data takes precedence)
+        const mergedDefaults = {
+          ...currentDefaults,
+          ...importedData.defaultSettings
+        }
+
+        // Save merged data to localStorage
+        localStorage.setItem('workouts', JSON.stringify(mergedWorkouts))
+        localStorage.setItem('restDays', JSON.stringify(mergedRestDays))
+        localStorage.setItem('workoutDefaults', JSON.stringify(mergedDefaults))
+
+        // Update app state
+        defaultWorkoutData.value = mergedDefaults
+        resetCurrentWorkoutData()
+        
+        // Update streak and UI
+        updateStreak()
+        updateTodayStatus()
+        updateRestDayButton()
+
+        showImportMessage(`Successfully imported ${importedData.workouts.length} workouts and ${importedData.restDays ? importedData.restDays.length : 0} rest days!`)
+        
+      } catch (error) {
+        showImportMessage('Error importing data. Please check the file format.', true)
+        console.error('Error importing workout data:', error)
+      }
+    }
+
+    function showImportMessage(message, isError = false) {
+      importMessage.value = message
+      importError.value = isError
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        importMessage.value = ''
+        importError.value = false
+      }, 5000)
+    }
+
     function downloadWorkoutData() {
       // Get all saved workouts
       const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
@@ -596,6 +725,9 @@ export default {
       streak,
       todayCompleted,
       restDayEnabled,
+      fileInput,
+      importMessage,
+      importError,
       showScreen,
       updateExerciseData,
       updateSets,
@@ -603,7 +735,9 @@ export default {
       downloadWorkoutData,
       autoSaveWorkout,
       clearAutoSave,
-      logRestDay
+      logRestDay,
+      triggerFileInput,
+      handleFileImport
     }
   }
 }
@@ -806,6 +940,30 @@ input, select, textarea {
   background: rgba(255, 193, 7, 1);
 }
 
+.data-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.import-btn {
+  background: rgba(255, 152, 0, 0.8);
+  border: none;
+  border-radius: 10px;
+  padding: 15px;
+  color: white;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.import-btn:active {
+  background: rgba(255, 152, 0, 1);
+}
+
 .download-btn {
   background: rgba(156, 39, 176, 0.8);
   border: none;
@@ -816,7 +974,6 @@ input, select, textarea {
   font-weight: 600;
   cursor: pointer;
   width: 100%;
-  margin-top: 10px;
 }
 
 .download-btn:active {
@@ -849,7 +1006,7 @@ input, select, textarea {
 /* Streak Counter */
 .streak-counter {
   position: fixed;
-  top: 65px;
+  top: 20px;
   right: 20px;
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
@@ -872,6 +1029,23 @@ input, select, textarea {
   font-weight: 400;
   margin-top: 2px;
   opacity: 0.9;
+}
+
+/* Import Status Message */
+.import-status {
+  margin-top: 15px;
+  padding: 12px;
+  background: rgba(76, 175, 80, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 0.9em;
+  border: 1px solid rgba(76, 175, 80, 0.5);
+}
+
+.import-status.error {
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.5);
 }
 
 /* Streak Status Message */
