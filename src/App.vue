@@ -59,9 +59,6 @@
 
       <!-- Streak Status Message -->
       <div v-if="streak > 0" class="streak-status">
-        <div v-if="todayCompleted" class="status-completed">
-          ✅ Streak maintained! You're on fire! 🔥
-        </div>
       </div>
     </div>
 
