@@ -56,10 +56,6 @@
       <div v-if="importMessage" class="import-status" :class="{ 'error': importError }">
         {{ importMessage }}
       </div>
-
-      <!-- Streak Status Message -->
-      <div v-if="streak > 0" class="streak-status">
-      </div>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
@@ -641,11 +637,11 @@ export default {
       importMessage.value = message
       importError.value = isError
       
-      // Clear message after 5 seconds
+      // Clear message after 3 seconds
       setTimeout(() => {
         importMessage.value = ''
         importError.value = false
-      }, 5000)
+      }, 3000)
     }
 
     function downloadWorkoutData() {
@@ -1038,11 +1034,23 @@ input, select, textarea {
   text-align: center;
   font-size: 0.9em;
   border: 1px solid rgba(76, 175, 80, 0.5);
+  animation: fadeOut 0.5s ease-in-out 2.5s forwards;
 }
 
 .import-status.error {
   background: rgba(244, 67, 54, 0.2);
   border: 1px solid rgba(244, 67, 54, 0.5);
+  animation: fadeOut 0.5s ease-in-out 2.5s forwards;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* Streak Status Message */
