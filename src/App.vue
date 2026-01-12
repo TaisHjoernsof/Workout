@@ -207,42 +207,73 @@ export default {
     }
 
     function loadDefaultData() {
-      const savedData = localStorage.getItem('workoutDefaults')
-      if (savedData) {
-        defaultWorkoutData.value = JSON.parse(savedData)
+      // Load defaults from the most recent workout data for each exercise
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+      const workoutTypeNames = {
+        arms: 'Arms & Shoulders',
+        chest: 'Chest & Core',
+        legs: 'Legs'
+      }
+      
+      const isDefaultValue = (field, value) => {
+        if (value === null || value === undefined) return true
+        if (Array.isArray(value)) {
+          // Check if array is all nulls or all default values
+          return value.every(v => v === null || v === undefined || (field === 'reps' && v === 8) || (field === 'weight' && v === 0))
+        }
+        return false
+      }
+      
+      Object.keys(workoutExercises).forEach(workoutType => {
+        const workoutTypeName = workoutTypeNames[workoutType]
         
-        Object.keys(workoutExercises).forEach(workoutType => {
-          workoutExercises[workoutType].forEach(exercise => {
-            if (!defaultWorkoutData.value[workoutType][exercise]) {
-              defaultWorkoutData.value[workoutType][exercise] = {
-                sets: 3,
-                reps: Array(3).fill(8),
-                weight: Array(3).fill(0)
+        // Sort workouts by date (newest first)
+        const sortedWorkouts = workouts
+          .filter(w => w.type === workoutTypeName)
+          .sort((a, b) => new Date(b.date) - new Date(a.date))
+        
+        defaultWorkoutData.value[workoutType] = {}
+        workoutExercises[workoutType].forEach(exercise => {
+          let found = false
+          
+          // Search through workouts to find the most recent with real data for this exercise
+          for (const workout of sortedWorkouts) {
+            if (workout.exercises && workout.exercises[exercise]) {
+              const exerciseData = workout.exercises[exercise]
+              
+              // Check if this has non-default values
+              const hasRealReps = !isDefaultValue('reps', exerciseData.reps)
+              const hasRealWeight = !isDefaultValue('weight', exerciseData.weight)
+              
+              if (hasRealReps || hasRealWeight) {
+                defaultWorkoutData.value[workoutType][exercise] = {
+                  sets: exerciseData.sets || 3,
+                  reps: exerciseData.reps || Array(exerciseData.sets || 3).fill(8),
+                  weight: exerciseData.weight || Array(exerciseData.sets || 3).fill(0)
+                }
+                found = true
+                break
               }
             }
-          })
-        })
-        
-        // For fresh workouts, start with empty current data (showing defaults as placeholders)
-        resetCurrentWorkoutData()
-        saveDefaultData()
-      } else {
-        Object.keys(workoutExercises).forEach(workoutType => {
-          workoutExercises[workoutType].forEach(exercise => {
+          }
+          
+          // Use static defaults if no real data found
+          if (!found) {
             defaultWorkoutData.value[workoutType][exercise] = {
               sets: 3,
               reps: Array(3).fill(8),
               weight: Array(3).fill(0)
             }
-          })
+          }
         })
-        resetCurrentWorkoutData()
-        saveDefaultData()
-      }
+      })
+      
+      // For fresh workouts, start with empty current data (showing defaults as placeholders)
+      resetCurrentWorkoutData()
     }
 
     function resetCurrentWorkoutData() {
-      // Reset current data to empty structures (will show defaults as placeholders)
+      // Reset current data to empty structures (all nulls - user hasn't entered data yet)
       Object.keys(workoutExercises).forEach(workoutType => {
         currentWorkoutData.value[workoutType] = {}
         workoutExercises[workoutType].forEach(exercise => {
@@ -260,7 +291,7 @@ export default {
     }
 
     function loadWorkoutData(workoutType) {
-      // Start with fresh workout data (showing defaults as placeholders)
+      // Start with fresh workout data with empty inputs (all nulls)
       currentWorkoutData.value[workoutType] = {}
       workoutExercises[workoutType].forEach(exercise => {
         currentWorkoutData.value[workoutType][exercise] = {
@@ -423,10 +454,6 @@ export default {
       workouts.push(workout)
       localStorage.setItem('workouts', JSON.stringify(workouts))
       
-      // Update default data with the completed workout (for placeholders next time)
-      defaultWorkoutData.value[workoutType] = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
-      saveDefaultData()
-      
       // Clear auto-save when workout is properly saved
       clearAutoSave()
 
@@ -434,6 +461,9 @@ export default {
       updateStreak()
       updateTodayStatus()
       updateRestDayButton()
+      
+      // Reload defaults from the now-updated workouts to reflect new placeholders
+      loadDefaultData()
       
       alert('Workout saved! Your settings are remembered for next time.')
       showScreen('choose')
@@ -614,11 +644,9 @@ export default {
         // Save merged data to localStorage
         localStorage.setItem('workouts', JSON.stringify(mergedWorkouts))
         localStorage.setItem('restDays', JSON.stringify(mergedRestDays))
-        localStorage.setItem('workoutDefaults', JSON.stringify(mergedDefaults))
 
-        // Update app state
-        defaultWorkoutData.value = mergedDefaults
-        resetCurrentWorkoutData()
+        // Reload defaults from the workouts (not from the imported static defaults)
+        loadDefaultData()
         
         // Update streak and UI
         updateStreak()
