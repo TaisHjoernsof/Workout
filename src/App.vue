@@ -11,51 +11,66 @@
         <h1>Choose Workout</h1>
         <p>Select your focus area</p>
       </div>
-      
       <div class="workout-buttons">
-        <button class="workout-btn" @click="showScreen('arms')">
-          Arms & Shoulders
-        </button>
-        <button class="workout-btn" @click="showScreen('chest')">
-          Chest & Core
-        </button>
-        <button class="workout-btn" @click="showScreen('legs')">
-          Legs
-        </button>
+        <button class="workout-btn" @click="showScreen('arms')">Arms & Shoulders</button>
+        <button class="workout-btn" @click="showScreen('chest')">Chest & Core</button>
+        <button class="workout-btn" @click="showScreen('legs')">Legs</button>
       </div>
-
-      <!-- Rest Day Button -->
-      <button 
-        class="rest-day-btn" 
-        :class="{ 'enabled': restDayEnabled }"
-        @click="logRestDay"
-        :disabled="!restDayEnabled"
-      >
+      <button class="rest-day-btn" :class="{ 'enabled': restDayEnabled }" @click="logRestDay" :disabled="!restDayEnabled">
         {{ todayCompleted ? '✅ Today Completed' : 'Rest Day' }}
       </button>
-
-      <!-- Import and Export Buttons -->
       <div class="data-buttons">
-        <button class="import-btn" @click="triggerFileInput">
-          📤 Import Workout Data
-        </button>
-        <input 
-          type="file" 
-          ref="fileInput"
-          accept=".json" 
-          style="display: none" 
-          @change="handleFileImport"
-        >
-        
-        <button class="download-btn" @click="downloadWorkoutData">
-          📥 Download Workout Data
-        </button>
+        <button class="progress-btn import-btn" @click="showScreen('progress')">📈 View Progress</button>
+        <button class="import-btn" @click="triggerFileInput">📤 Import<br>Workout Data</button>
+        <input type="file" ref="fileInput" accept=".json" style="display: none" @change="handleFileImport">
+        <button class="download-btn" @click="downloadWorkoutData">📥 Download Workout Data</button>
       </div>
+      <div v-if="importMessage" class="import-status" :class="{ 'error': importError }">{{ importMessage }}</div>
+    </div>
 
-      <!-- Import Status Message -->
-      <div v-if="importMessage" class="import-status" :class="{ 'error': importError }">
-        {{ importMessage }}
+    <!-- Progress History Screen -->
+    <div v-if="currentScreen === 'progress'" class="screen active">
+      <div class="header">
+        <h1>Workout Progress</h1>
+        <div class="streak-hint">See your last set weight and reps for each exercise</div>
       </div>
+      <div v-for="workoutType in ['arms', 'chest', 'legs']" :key="workoutType" class="progress-section">
+        <h2 style="margin-top: 20px;">{{ capitalize(workoutType) }} Workouts</h2>
+        <ProgressGraph
+          v-if="progressData[workoutType].length > 0"
+          :progressData="progressData[workoutType]"
+          :exerciseList="workoutExercises[workoutType]"
+        />
+        <div v-if="progressData[workoutType].length === 0" class="streak-status status-pending">No history yet.</div>
+        <details style="margin-top: 12px;" :open="false">
+          <summary style="cursor:pointer;font-weight:500;font-size:1em;">Show {{ capitalize(workoutType) }} Progress Table</summary>
+          <div v-if="progressData[workoutType].length > 0">
+            <table class="progress-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Exercise</th>
+                  <th>Last Set Weight</th>
+                  <th>Reps (All Sets)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in progressData[workoutType]" :key="entry.date + entry.exercise">
+                  <td>{{ entry.date }}</td>
+                  <td>{{ entry.exercise }}</td>
+                  <td>{{ entry.lastSetWeight }}</td>
+                  <td>
+                    <span v-for="(rep, idx) in entry.reps" :key="idx">
+                      <span v-if="idx > 0">, </span>{{ rep }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
     </div>
 
     <!-- Screen 2: Arms & Shoulders Workout -->
@@ -124,13 +139,53 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+    // Progress Data (reactive)
+    const progressData = reactive({
+      arms: [],
+      chest: [],
+      legs: []
+    })
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1)
+    }
+    function loadProgressData() {
+      // Clear previous data
+      progressData.arms = [];
+      progressData.chest = [];
+      progressData.legs = [];
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]');
+      // Map workout type names to keys
+      const typeMap = {
+        'Arms & Shoulders': 'arms',
+        'Chest & Core': 'chest',
+        'Legs': 'legs'
+      };
+      workouts.forEach(w => {
+        const typeKey = typeMap[w.type];
+        if (!typeKey) return;
+        // w.exercises is the data object
+        Object.keys(w.exercises).forEach(exercise => {
+          const exData = w.exercises[exercise];
+          const reps = exData.reps ? exData.reps.slice(0, 3).map(r => r ?? '-') : ['-', '-', '-'];
+          const lastSetWeight = exData.weight && exData.weight.length > 0 ? exData.weight[exData.weight.length - 1] ?? '-' : '-';
+          progressData[typeKey].push({
+            date: new Date(w.date).toLocaleDateString(),
+            exercise,
+            lastSetWeight,
+            reps
+          });
+        });
+      });
+    }
 import WorkoutExercises from './components/WorkoutExercises.vue'
+import ProgressGraph from './components/ProgressGraph.vue'
 
 export default {
   name: 'App',
   components: {
-    WorkoutExercises
+    WorkoutExercises,
+    ProgressGraph
   },
   setup() {
     const currentScreen = ref('choose')
@@ -192,17 +247,19 @@ export default {
     const isFreshWorkout = ref(true)
 
     function showScreen(screen) {
-      currentScreen.value = screen
-      if (screen !== 'choose') {
-        isFreshWorkout.value = true // Assume fresh workout until we check for auto-save
-        loadWorkoutData(screen)
+      currentScreen.value = screen;
+      if (screen === 'progress') {
+        loadProgressData();
+      } else if (screen !== 'choose') {
+        isFreshWorkout.value = true; // Assume fresh workout until we check for auto-save
+        loadWorkoutData(screen);
       } else {
         // Clear auto-save when going back to choose screen intentionally
-        clearAutoSave()
+        clearAutoSave();
         // Update streak and rest day button when returning to choose screen
-        updateStreak()
-        updateTodayStatus()
-        updateRestDayButton()
+        updateStreak();
+        updateTodayStatus();
+        updateRestDayButton();
       }
     }
 
@@ -758,7 +815,9 @@ export default {
       clearAutoSave,
       logRestDay,
       triggerFileInput,
-      handleFileImport
+      handleFileImport,
+      progressData,
+      capitalize
     }
   }
 }
@@ -944,54 +1003,58 @@ input, select, textarea {
   background: rgba(76, 175, 80, 1);
 }
 
-.save-progress-btn {
-  background: rgba(255, 193, 7, 0.8);
-  border: none;
-  border-radius: 10px;
-  padding: 15px;
-  color: white;
-  font-size: 1.1em;
-  font-weight: 600;
-  cursor: pointer;
-  width: 100%;
-  margin-top: 10px;
-}
-
-.save-progress-btn:active {
-  background: rgba(255, 193, 7, 1);
+ .progress-btn {
+   /* Use green accent color */
+   background: rgba(102, 187, 106, 0.8);
+   border: 2px solid rgba(255, 255, 255, 0.3);
+   border-radius: 10px;
+   padding: 15px;
+   color: white;
+   font-size: 1.1em;
+   font-weight: 600;
+   cursor: pointer;
+   width: 100%;
+   transition: all 0.3s ease;
+ }
+ .progress-btn:active {
+   background: rgba(102, 187, 106, 1);
 }
 
 .data-buttons {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
-.import-btn {
+.progress-btn {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.import-btn:not(.progress-btn) {
   background: rgba(255, 152, 0, 0.8);
-  border: none;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
-  padding: 15px;
+  padding: 10px 12px;
   color: white;
-  font-size: 1.1em;
+  font-size: 0.9em;
   font-weight: 600;
   cursor: pointer;
   width: 100%;
-  margin-top: 10px;
 }
 
-.import-btn:active {
+.import-btn:not(.progress-btn):active {
   background: rgba(255, 152, 0, 1);
 }
 
 .download-btn {
   background: rgba(156, 39, 176, 0.8);
-  border: none;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
-  padding: 15px;
+  padding: 10px 12px;
   color: white;
-  font-size: 1.1em;
+  font-size: 0.9em;
   font-weight: 600;
   cursor: pointer;
   width: 100%;
@@ -1005,13 +1068,14 @@ input, select, textarea {
   background: rgba(128, 128, 128, 0.5);
   border: none;
   border-radius: 10px;
-  padding: 15px;
+  padding: 20px;
   color: white;
-  font-size: 1.1em;
+  font-size: 1.2em;
   font-weight: 600;
   cursor: not-allowed;
   width: 100%;
   margin-top: 10px;
+  margin-bottom: 10px;
   transition: all 0.3s ease;
 }
 
