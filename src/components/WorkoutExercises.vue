@@ -93,6 +93,7 @@ export default {
     return {
       focusedInputs: new Set(),
       showVideo: {},
+      collapsed: {},
       videoError: {}
     }
   },
@@ -180,6 +181,10 @@ export default {
     handleVideoLoaded(exercise) {
       console.log(`Video loaded successfully for: ${exercise}`);
       this.videoError[exercise] = false;
+    },
+
+    toggleCollapse(exercise) {
+      this.collapsed[exercise] = !this.collapsed[exercise];
     }
   }
 }
@@ -244,5 +249,19 @@ export default {
   text-align: center;
   padding: 10px;
   font-size: 0.9em;
+/* Collapsible panel styles */
+.collapse-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2em;
+  margin-right: 8px;
+  cursor: pointer;
+  outline: none;
+  transition: color 0.2s;
+}
+.collapse-btn:hover {
+  color: #22f0ff;
+}
 }
 </style>
