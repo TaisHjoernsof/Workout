@@ -212,9 +212,12 @@ export default {
     // Timer state
     const timerSeconds = ref(0)
     const timerActive = ref(false)
+    const TIMER_ALERT_SECONDS = 120
     let timerIntervalId = null
     let notificationSent = false
     let timerStartTime = null // Tracks when timer was started (ISO string)
+    let timerSessionId = null
+    let pushSubscription = null
     let hasShownNotificationSetupHint = false
     const showTimerToast = ref(false)
     
@@ -537,7 +540,7 @@ export default {
 
         timerSeconds.value = elapsedSeconds;
 
-        if (elapsedSeconds >= 120 && !notificationSent) {
+        if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
           notificationSent = true;
           sendTimerNotification();
           saveTimerState();
@@ -824,40 +827,129 @@ export default {
       alert(message);
     }
 
-    function checkNotificationPermission() {
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-      const isSecureContextForPush = window.isSecureContext || window.location.hostname === 'localhost';
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+      const rawData = window.atob(base64)
+      return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
+    }
 
-      if (!('Notification' in window)) {
-        console.log('Notification API NOT available on this device');
+    async function ensurePushSubscription(isUserAction = false) {
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+      const isSecureContextForPush = window.isSecureContext || window.location.hostname === 'localhost'
+
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
         if (isIOS) {
-          showNotificationSetupHint('Notifications are not available in this context on iPhone. Open the installed Home Screen app and try again.');
+          showNotificationSetupHint('Push is unavailable in this context on iPhone. Open the installed Home Screen app and try again.')
         }
-        return;
+        return null
       }
 
       if (isIOS && !isStandalone) {
-        showNotificationSetupHint('On iPhone, notification permission works only in the installed Home Screen app. Use Safari -> Share -> Add to Home Screen, then open from your Home Screen.');
-        return;
+        showNotificationSetupHint('On iPhone, push works only in the installed Home Screen app. Use Safari -> Share -> Add to Home Screen, then open from your Home Screen.')
+        return null
       }
 
       if (!isSecureContextForPush) {
-        showNotificationSetupHint('Notifications require HTTPS. Your local network URL is HTTP, so iOS blocks notification permission. Use the installed app from a secure HTTPS URL (for example via a tunnel like ngrok or Cloudflare Tunnel).');
-        return;
+        showNotificationSetupHint('Push requires HTTPS. Open the app from a secure HTTPS URL.')
+        return null
       }
 
-      console.log('Notification API available, current permission:', Notification.permission);
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-          console.log('Notification permission result:', permission);
-          if (permission !== 'granted') {
-            alert('Notification permission was not granted. You can enable it later in iOS Settings -> Notifications for this app.');
-          }
-        }).catch((err) => {
-          console.error('Notification permission request failed:', err);
-          alert('Could not request notification permission on this device/context.');
-        });
+      if (Notification.permission === 'default' && isUserAction) {
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') {
+          return null
+        }
+      }
+
+      if (Notification.permission !== 'granted') {
+        return null
+      }
+
+      const registration = await navigator.serviceWorker.ready
+      let subscription = await registration.pushManager.getSubscription()
+
+      if (!subscription) {
+        const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+        if (!vapidPublicKey) {
+          console.warn('Missing VITE_VAPID_PUBLIC_KEY - backend push scheduling disabled')
+          return null
+        }
+
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        })
+      }
+
+      pushSubscription = subscription
+
+      // Register/update subscription on backend (best-effort)
+      fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: subscription.toJSON() })
+      }).catch((err) => {
+        console.log('Subscription sync failed:', err)
+      })
+
+      return subscription
+    }
+
+    async function startServerTimerPush(delaySeconds, isUserAction = false) {
+      if (delaySeconds <= 0 || notificationSent) return
+
+      try {
+        const subscription = pushSubscription || await ensurePushSubscription(isUserAction)
+        if (!subscription) return
+
+        if (!timerSessionId) {
+          timerSessionId = crypto.randomUUID()
+        }
+
+        await fetch('/api/timer/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: timerSessionId,
+            delaySeconds,
+            subscription: subscription.toJSON(),
+            notification: {
+              title: 'Rest Time Complete! ⏱️',
+              body: '2 minutes have passed',
+              tag: 'rest-timer'
+            }
+          })
+        })
+      } catch (err) {
+        console.log('Failed to schedule server push:', err)
+      }
+    }
+
+    async function stopServerTimerPush() {
+      try {
+        const subscription = pushSubscription || await ensurePushSubscription(false)
+        if (!subscription || !timerSessionId) return
+
+        await fetch('/api/timer/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: timerSessionId,
+            endpoint: subscription.endpoint
+          })
+        })
+      } catch (err) {
+        console.log('Failed to cancel server push timer:', err)
+      }
+    }
+
+    async function checkNotificationPermission() {
+      try {
+        await ensurePushSubscription(true)
+      } catch (err) {
+        console.log('Notification permission/subscription check failed:', err)
       }
     }
 
@@ -990,6 +1082,7 @@ export default {
           timerStartTime: timerStartTime,
           timerActive: timerActive.value,
           timerSeconds: timerSeconds.value,
+          timerSessionId: timerSessionId,
           notificationSent: notificationSent
         }));
       }
@@ -1006,6 +1099,7 @@ export default {
       try {
         const state = JSON.parse(saved);
         notificationSent = state.notificationSent || false;
+        timerSessionId = state.timerSessionId || null;
 
         if (state.timerActive && state.timerStartTime) {
           const startTime = new Date(state.timerStartTime);
@@ -1018,7 +1112,7 @@ export default {
             timerStartTime = state.timerStartTime;
 
             // If threshold was crossed while app was backgrounded/closed, notify once on resume.
-            if (elapsedSeconds >= 120 && !notificationSent) {
+            if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
               notificationSent = true;
               sendTimerNotification();
               saveTimerState();
@@ -1043,42 +1137,51 @@ export default {
       toggleTimer(true);
     }
 
-    function toggleTimer(isUserAction = false) {
+    function runTimerLoop() {
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId)
+      }
+
+      timerIntervalId = setInterval(() => {
+        const startTime = new Date(timerStartTime)
+        const now = new Date()
+        const elapsedSeconds = Math.floor((now - startTime) / 1000)
+
+        timerSeconds.value = elapsedSeconds
+
+        // Debug: log every 5 seconds
+        if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
+          console.log('Timer at:', elapsedSeconds, 'seconds. Notification sent:', notificationSent)
+        }
+
+        // Send notification at 120 seconds (2 minutes)
+        if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
+          console.log('Timer reached 120 seconds, sending notification')
+          notificationSent = true
+          sendTimerNotification()
+          saveTimerState()
+        }
+      }, 100)
+    }
+
+    async function toggleTimer(isUserAction = false) {
       if (!timerActive.value) {
         if (isUserAction) {
           // Request notification permission only when the user explicitly starts the timer
-          checkNotificationPermission();
+          await checkNotificationPermission();
         }
         timerActive.value = true;
 
         // Rebuild start time from displayed seconds so paused time is never counted.
         timerStartTime = new Date(Date.now() - (timerSeconds.value * 1000)).toISOString();
-        
-        if (timerIntervalId) {
-          clearInterval(timerIntervalId);
+
+        runTimerLoop();
+
+        if (!notificationSent) {
+          timerSessionId = crypto.randomUUID()
+          const remainingSeconds = Math.max(1, TIMER_ALERT_SECONDS - timerSeconds.value)
+          startServerTimerPush(remainingSeconds, isUserAction)
         }
-        
-        // Use elapsed time calculation for accurate timing
-        timerIntervalId = setInterval(() => {
-          const startTime = new Date(timerStartTime);
-          const now = new Date();
-          const elapsedSeconds = Math.floor((now - startTime) / 1000);
-          
-          timerSeconds.value = elapsedSeconds;
-          
-          // Debug: log every 5 seconds
-          if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
-            console.log('Timer at:', elapsedSeconds, 'seconds. Notification sent:', notificationSent);
-          }
-          
-          // Send notification at 120 seconds (2 minutes)
-          if (elapsedSeconds >= 120 && !notificationSent) {
-            console.log('Timer reached 120 seconds, sending notification');
-            notificationSent = true;
-            sendTimerNotification();
-            saveTimerState();
-          }
-        }, 100);
         
         // Save timer state when started
         saveTimerState();
@@ -1089,6 +1192,8 @@ export default {
           clearInterval(timerIntervalId);
           timerIntervalId = null;
         }
+
+        stopServerTimerPush();
         
         // Save paused state
         saveTimerState();
@@ -1105,25 +1210,10 @@ export default {
       
       if (wasRunning) {
         // Keep running: restart the timer from 00:00
-        if (timerIntervalId) {
-          clearInterval(timerIntervalId);
-        }
-        
-        timerIntervalId = setInterval(() => {
-          const startTime = new Date(timerStartTime);
-          const now = new Date();
-          const elapsedSeconds = Math.floor((now - startTime) / 1000);
-          
-          timerSeconds.value = elapsedSeconds;
-          
-          // Send notification at 120 seconds
-          if (elapsedSeconds >= 120 && !notificationSent) {
-            console.log('Timer reached 120 seconds, sending notification');
-            notificationSent = true;
-            sendTimerNotification();
-            saveTimerState();
-          }
-        }, 100);
+        runTimerLoop();
+
+        timerSessionId = crypto.randomUUID()
+        startServerTimerPush(TIMER_ALERT_SECONDS, false)
         
         saveTimerState();
       } else {
@@ -1134,6 +1224,7 @@ export default {
         }
         timerActive.value = false;
         timerStartTime = null;
+        timerSessionId = null;
         clearTimerState();
       }
     }

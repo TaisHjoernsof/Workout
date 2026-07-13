@@ -101,7 +101,7 @@ self.addEventListener('push', (event) => {
   console.log('Push notification received:', event);
   
   const options = {
-    body: '15 seconds have passed - Rest time complete!',
+    body: '2 minutes have passed - Rest time complete!',
     icon: '/android-chrome-192x192.png',
     badge: '/favicon-32x32.png',
     tag: 'rest-timer',
