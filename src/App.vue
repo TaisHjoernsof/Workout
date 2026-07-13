@@ -294,7 +294,7 @@ export default {
       }
       
       const isDefaultValue = (field, value) => {
-        if (value === null || value === undefined) return true
+        if (value === null || value === undefined || value === '') return true
         if (Array.isArray(value)) {
           // Check if array is all nulls or all default values
           return value.every(v => v === null || v === undefined || (field === 'reps' && v === 8) || (field === 'weight' && v === 0))
@@ -322,12 +322,19 @@ export default {
               // Check if this has non-default values
               const hasRealReps = !isDefaultValue('reps', exerciseData.reps)
               const hasRealWeight = !isDefaultValue('weight', exerciseData.weight)
+              const hasRealArmStart = !isDefaultValue('armStart', exerciseData.armStart)
+              const setCount = exerciseData.sets || 3
               
-              if (hasRealReps || hasRealWeight) {
+              if (hasRealReps || hasRealWeight || hasRealArmStart) {
+                const armStart = exerciseData.armStart === 'L' || exerciseData.armStart === 'R'
+                  ? exerciseData.armStart
+                  : null
+
                 defaultWorkoutData.value[workoutType][exercise] = {
-                  sets: exerciseData.sets || 3,
-                  reps: exerciseData.reps || Array(exerciseData.sets || 3).fill(8),
-                  weight: exerciseData.weight || Array(exerciseData.sets || 3).fill(0)
+                  sets: setCount,
+                  reps: hasRealReps ? exerciseData.reps : Array(setCount).fill(8),
+                  weight: hasRealWeight ? exerciseData.weight : Array(setCount).fill(0),
+                  armStart
                 }
                 found = true
                 break
@@ -340,7 +347,8 @@ export default {
             defaultWorkoutData.value[workoutType][exercise] = {
               sets: 3,
               reps: Array(3).fill(8),
-              weight: Array(3).fill(0)
+              weight: Array(3).fill(0),
+              armStart: null
             }
           }
         })
@@ -358,7 +366,8 @@ export default {
           currentWorkoutData.value[workoutType][exercise] = {
             sets: defaultWorkoutData.value[workoutType][exercise].sets,
             reps: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
-            weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null)
+            weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
+            armStart: null
           }
         })
       })
@@ -375,7 +384,8 @@ export default {
         currentWorkoutData.value[workoutType][exercise] = {
           sets: defaultWorkoutData.value[workoutType][exercise].sets,
           reps: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
-          weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null)
+          weight: Array(defaultWorkoutData.value[workoutType][exercise].sets).fill(null),
+          armStart: null
         }
       })
     }
@@ -389,11 +399,26 @@ export default {
         currentWorkoutData.value[workoutType][exerciseName] = {
           sets: 3,
           reps: Array(3).fill(null),
-          weight: Array(3).fill(null)
+          weight: Array(3).fill(null),
+          armStart: null
         }
       }
       
       const exerciseData = currentWorkoutData.value[workoutType][exerciseName];
+
+      if (field === 'armStart') {
+        const normalizedValue = value === '' || value === null || value === undefined
+          ? null
+          : String(value).trim().toUpperCase()
+
+        exerciseData.armStart = normalizedValue === 'L' || normalizedValue === 'R' ? normalizedValue : null
+
+        setTimeout(() => {
+          autoSaveWorkout();
+        }, 500);
+
+        return;
+      }
       
       if (!exerciseData[field]) {
         exerciseData[field] = [];
@@ -423,7 +448,8 @@ export default {
         currentWorkoutData.value[workoutType][exerciseName] = {
           sets: 3,
           reps: Array(3).fill(null),
-          weight: Array(3).fill(null)
+          weight: Array(3).fill(null),
+          armStart: null
         }
       }
       
@@ -1084,9 +1110,10 @@ input, select, textarea {
 
 .exercise-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   margin-bottom: 15px;
+  gap: 10px;
 }
 
 .exercise-name {

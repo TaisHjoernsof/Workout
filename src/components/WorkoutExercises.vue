@@ -12,6 +12,20 @@
           >
             {{ showVideo[exercise] ? '▲' : '▶' }}
           </button>
+          <div class="arm-start-control">
+            <span>Start:</span>
+            <input
+              type="text"
+              class="arm-start-input"
+              :value="getCurrentValue(exercise, 'armStart')"
+              :placeholder="getDefaultValue(exercise, 'armStart')"
+              maxlength="1"
+              inputmode="text"
+              autocapitalize="characters"
+              @input="handleArmStartInput($event, workoutType, exercise)"
+              @blur="handleArmStartBlur(workoutType, exercise, $event)"
+            >
+          </div>
           <div class="sets-control">
             <span>Sets:</span>
             <input 
@@ -100,9 +114,14 @@ export default {
   methods: {
     getCurrentValue(exercise, field, index) {
       const exerciseData = this.workoutData[exercise];
-      if (!exerciseData || !exerciseData[field]) {
+      if (!exerciseData || exerciseData[field] == null) {
         return '';
       }
+
+      if (!Array.isArray(exerciseData[field])) {
+        return exerciseData[field].toString();
+      }
+
       const value = exerciseData[field][index];
       
       // Return empty string for null values (user hasn't entered data yet)
@@ -115,13 +134,36 @@ export default {
     
     getDefaultValue(exercise, field, index) {
       const exerciseData = this.defaultData[exercise];
-      if (!exerciseData || !exerciseData[field]) {
-        return field === 'reps' ? '8' : '0';
+      if (!exerciseData || exerciseData[field] == null) {
+        return field === 'reps' ? '8' : field === 'weight' ? '0' : '';
       }
+
+      if (!Array.isArray(exerciseData[field])) {
+        return exerciseData[field].toString();
+      }
+
       const value = exerciseData[field][index];
       const defaultValue = field === 'reps' ? 8 : 0;
       
+      if (field === 'armStart') {
+        return value === null || value === undefined ? '' : value.toString();
+      }
+
       return (value === null || value === undefined) ? defaultValue.toString() : value.toString();
+    },
+
+    handleArmStartInput(event, workoutType, exercise) {
+      const rawValue = (event.target.value || '').trim().toUpperCase();
+      const normalizedValue = rawValue === 'L' || rawValue === 'R' ? rawValue : '';
+
+      event.target.value = normalizedValue;
+      this.$emit('update-exercise', workoutType, exercise, 0, 'armStart', normalizedValue || null);
+    },
+
+    handleArmStartBlur(workoutType, exercise, event) {
+      if (!event.target.value) {
+        this.$emit('update-exercise', workoutType, exercise, 0, 'armStart', null);
+      }
     },
     
     handleFocus(event, field) {
@@ -195,6 +237,28 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.arm-start-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.arm-start-control span {
+  font-size: 0.85em;
+  opacity: 0.9;
+}
+
+.arm-start-input {
+  width: 38px;
+  padding: 5px 4px;
+  border: none;
+  border-radius: 5px;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .video-btn {
