@@ -147,6 +147,13 @@
       @reset-timer="resetTimer"
     />
 
+    <!-- Toast Notification for Timer Alert -->
+    <transition name="fade">
+      <div v-if="showTimerToast" class="timer-toast">
+        ⏱️ Rest time complete! (2 minutes)
+      </div>
+    </transition>
+
     <!-- Screen 2: Arms & Shoulders Workout -->
     <div v-if="currentScreen === 'arms'" class="screen active">
       <div class="header">
@@ -441,7 +448,9 @@ export default {
     const timerSeconds = ref(0)
     const timerActive = ref(false)
     let timerIntervalId = null
+    let notificationSent = false
     let timerStartTime = null // Tracks when timer was started (ISO string)
+    const showTimerToast = ref(false)
     
     const workoutExercises = {
       arms: [
@@ -1213,6 +1222,12 @@ export default {
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
 
         timerSeconds.value = elapsedSeconds;
+
+        if (elapsedSeconds >= 120 && !notificationSent) {
+          notificationSent = true;
+          sendTimerNotification();
+          saveTimerState();
+        }
       }
     }
 
@@ -1493,55 +1508,113 @@ export default {
     }
 
     // Timer functions
+    function checkNotificationPermission() {
+      if (!('Notification' in window)) return
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch((err) => {
+          console.log('Notification permission request failed:', err)
+        })
+      }
+    }
+
+    function sendTimerNotification() {
+      // Try service worker notification first.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification('Rest Time Complete! ⏱️', {
+            body: '2 minutes have passed',
+            icon: '/android-chrome-192x192.png',
+            badge: '/favicon-32x32.png',
+            tag: 'rest-timer',
+            requireInteraction: true,
+            vibrate: [200, 100, 200]
+          }).catch(() => {
+            sendRegularNotification()
+          })
+        }).catch(() => {
+          sendRegularNotification()
+        })
+      } else {
+        sendRegularNotification()
+      }
+
+      function sendRegularNotification() {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('Rest Time Complete!', {
+              body: '2 minutes have passed',
+              tag: 'rest-timer'
+            })
+            return
+          } catch (e) {
+            console.log('Regular notification failed:', e)
+          }
+        }
+
+        // Fallback visual toast
+        showTimerToast.value = true
+        setTimeout(() => {
+          showTimerToast.value = false
+        }, 4000)
+      }
+    }
 
     function saveTimerState() {
       if (timerStartTime) {
         localStorage.setItem('timerState', JSON.stringify({
           timerStartTime: timerStartTime,
           timerActive: timerActive.value,
-          timerSeconds: timerSeconds.value
-        }));
+          timerSeconds: timerSeconds.value,
+          notificationSent: notificationSent
+        }))
       }
     }
 
     function clearTimerState() {
-      localStorage.removeItem('timerState');
+      localStorage.removeItem('timerState')
     }
 
     function restoreTimerState() {
-      const saved = localStorage.getItem('timerState');
-      if (!saved) return;
+      const saved = localStorage.getItem('timerState')
+      if (!saved) return
 
       try {
-        const state = JSON.parse(saved);
+        const state = JSON.parse(saved)
+        notificationSent = state.notificationSent || false
 
         if (state.timerActive && state.timerStartTime) {
-          const startTime = new Date(state.timerStartTime);
-          const now = new Date();
-          const elapsedSeconds = Math.floor((now - startTime) / 1000);
+          const startTime = new Date(state.timerStartTime)
+          const now = new Date()
+          const elapsedSeconds = Math.floor((now - startTime) / 1000)
 
           // Only restore if elapsed time is reasonable (less than 1 hour)
           if (elapsedSeconds >= 0 && elapsedSeconds < 3600) {
-            timerSeconds.value = elapsedSeconds;
-            timerStartTime = state.timerStartTime;
+            timerSeconds.value = elapsedSeconds
+            timerStartTime = state.timerStartTime
 
-            toggleTimer(false);
+            if (elapsedSeconds >= 120 && !notificationSent) {
+              notificationSent = true
+              sendTimerNotification()
+              saveTimerState()
+            }
+
+            toggleTimer(false)
           } else {
-            clearTimerState();
+            clearTimerState()
           }
         } else {
-          timerActive.value = false;
-          timerSeconds.value = typeof state.timerSeconds === 'number' ? state.timerSeconds : 0;
-          timerStartTime = null;
+          timerActive.value = false
+          timerSeconds.value = typeof state.timerSeconds === 'number' ? state.timerSeconds : 0
+          timerStartTime = null
         }
       } catch (e) {
-        console.error('Error restoring timer state:', e);
-        clearTimerState();
+        console.error('Error restoring timer state:', e)
+        clearTimerState()
       }
     }
 
     function startTimer() {
-      toggleTimer(true);
+      toggleTimer(true)
     }
 
     function runTimerLoop() {
@@ -1556,61 +1629,58 @@ export default {
 
         timerSeconds.value = elapsedSeconds
 
-        // Debug: log every 5 seconds
-        if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
-          console.log('Timer at:', elapsedSeconds, 'seconds')
+        // Send notification at 120 seconds (2 minutes)
+        if (elapsedSeconds >= 120 && !notificationSent) {
+          notificationSent = true
+          sendTimerNotification()
+          saveTimerState()
         }
       }, 100)
     }
 
-    function toggleTimer() {
+    function toggleTimer(isUserAction = false) {
       if (!timerActive.value) {
-        timerActive.value = true;
-
-        // Rebuild start time from displayed seconds so paused time is never counted.
-        timerStartTime = new Date(Date.now() - (timerSeconds.value * 1000)).toISOString();
-
-        runTimerLoop();
-        
-        // Save timer state when started
-        saveTimerState();
-      } else {
-        // Pause timer
-        timerActive.value = false;
-        if (timerIntervalId) {
-          clearInterval(timerIntervalId);
-          timerIntervalId = null;
+        if (isUserAction) {
+          checkNotificationPermission()
         }
-        
-        // Save paused state
-        saveTimerState();
+
+        timerActive.value = true
+        // Rebuild start time from displayed seconds so paused time is never counted.
+        timerStartTime = new Date(Date.now() - (timerSeconds.value * 1000)).toISOString()
+
+        runTimerLoop()
+        saveTimerState()
+      } else {
+        timerActive.value = false
+        if (timerIntervalId) {
+          clearInterval(timerIntervalId)
+          timerIntervalId = null
+        }
+        saveTimerState()
       }
     }
 
     function resetTimer() {
-      const wasRunning = timerActive.value;
-      
+      const wasRunning = timerActive.value
+
       // Reset to 00:00
-      timerSeconds.value = 0;
-      timerStartTime = new Date().toISOString(); // Reset start time for accurate elapsed calculation
-      
+      timerSeconds.value = 0
+      notificationSent = false
+      timerStartTime = new Date().toISOString()
+
       if (wasRunning) {
         // Keep running: restart the timer from 00:00
-        runTimerLoop();
-
-        timerSessionId = crypto.randomUUID()
-        startServerTimerPush(TIMER_ALERT_SECONDS, false)
-        
-        saveTimerState();
+        runTimerLoop()
+        saveTimerState()
       } else {
         // Not running: just reset to 00:00 and stop
         if (timerIntervalId) {
-          clearInterval(timerIntervalId);
-          timerIntervalId = null;
+          clearInterval(timerIntervalId)
+          timerIntervalId = null
         }
-        timerActive.value = false;
-        timerStartTime = null;
-        clearTimerState();
+        timerActive.value = false
+        timerStartTime = null
+        clearTimerState()
       }
     }
 
@@ -1682,7 +1752,8 @@ export default {
       sessionOverview,
       startTimer,
       toggleTimer,
-      resetTimer
+      resetTimer,
+      showTimerToast
     }
   }
 }
