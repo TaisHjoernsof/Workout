@@ -210,7 +210,7 @@ export default {
     let autoSaveInterval = null
     
     // Timer state
-    const timerSeconds = ref(0)
+    const timerSeconds = ref(120) // 2 minutes
     const timerActive = ref(false)
     let timerIntervalId = null
     let notificationSent = false
@@ -994,14 +994,15 @@ export default {
         const startTime = new Date(state.timerStartTime);
         const now = new Date();
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        const remainingSeconds = Math.max(0, 120 - elapsedSeconds);
 
-        // Only restore if timer was active and elapsed time is reasonable (less than 1 hour)
-        if (state.timerActive && elapsedSeconds >= 0 && elapsedSeconds < 3600) {
-          timerSeconds.value = elapsedSeconds;
+        // Only restore if timer was active and remaining time is reasonable (more than 0 seconds, less than 120)
+        if (state.timerActive && remainingSeconds > 0 && remainingSeconds <= 120) {
+          timerSeconds.value = remainingSeconds;
           timerStartTime = state.timerStartTime;
           notificationSent = state.notificationSent || false;
           // Restore timer state without requesting permission automatically
-          if (elapsedSeconds < 15 || !state.notificationSent) {
+          if (remainingSeconds > 15 || !state.notificationSent) {
             toggleTimer(false);
           }
         } else if (state.timerActive && elapsedSeconds >= 3600) {
@@ -1035,24 +1036,37 @@ export default {
           clearInterval(timerIntervalId);
         }
         
-        // Use elapsed time calculation for accurate timing
+        // Use elapsed time calculation for accurate countdown timing
         timerIntervalId = setInterval(() => {
           const startTime = new Date(timerStartTime);
           const now = new Date();
           const elapsedSeconds = Math.floor((now - startTime) / 1000);
+          const remainingSeconds = 120 - elapsedSeconds;
           
-          timerSeconds.value = elapsedSeconds;
+          timerSeconds.value = Math.max(0, remainingSeconds);
           
           // Debug: log every 5 seconds
           if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
-            console.log('Timer at:', elapsedSeconds, 'seconds. Notification sent:', notificationSent);
+            console.log('Timer remaining:', Math.max(0, remainingSeconds), 'seconds. Notification sent:', notificationSent);
           }
           
-          // Send notification at 15 seconds (testing)
-          if (elapsedSeconds === 15 && !notificationSent) {
-            console.log('Timer reached 15 seconds, sending notification');
+          // Send notification when 15 seconds remain (timer reaches 15)
+          if (remainingSeconds === 15 && !notificationSent) {
+            console.log('Timer at 15 seconds remaining, sending notification');
             notificationSent = true;
             sendTimerNotification();
+          }
+          
+          // Stop when countdown reaches 0
+          if (remainingSeconds <= 0) {
+            timerSeconds.value = 0;
+            timerActive.value = false;
+            if (timerIntervalId) {
+              clearInterval(timerIntervalId);
+              timerIntervalId = null;
+            }
+            notificationSent = false;
+            clearTimerState();
           }
         }, 100);
         
@@ -1072,15 +1086,51 @@ export default {
     }
 
     function resetTimer() {
-      timerActive.value = false;
-      timerSeconds.value = 0;
+      const wasRunning = timerActive.value;
+      
+      // Reset to 2 minutes
+      timerSeconds.value = 120;
       notificationSent = false;
-      timerStartTime = null;
-      if (timerIntervalId) {
-        clearInterval(timerIntervalId);
-        timerIntervalId = null;
+      timerStartTime = new Date().toISOString(); // Reset start time for accurate elapsed calculation
+      
+      if (wasRunning) {
+        // Keep running: restart the timer from 2 minutes
+        if (timerIntervalId) {
+          clearInterval(timerIntervalId);
+        }
+        
+        timerIntervalId = setInterval(() => {
+          const startTime = new Date(timerStartTime);
+          const now = new Date();
+          const elapsedSeconds = Math.floor((now - startTime) / 1000);
+          
+          timerSeconds.value = 120 - elapsedSeconds;
+          
+          // Stop when countdown reaches 0
+          if (timerSeconds.value <= 0) {
+            timerSeconds.value = 0;
+            timerActive.value = false;
+            if (timerIntervalId) {
+              clearInterval(timerIntervalId);
+              timerIntervalId = null;
+            }
+            notificationSent = false;
+            clearTimerState();
+            sendTimerNotification();
+          }
+        }, 100);
+        
+        saveTimerState();
+      } else {
+        // Not running: just reset to 2 minutes and stop
+        if (timerIntervalId) {
+          clearInterval(timerIntervalId);
+          timerIntervalId = null;
+        }
+        timerActive.value = false;
+        timerStartTime = null;
+        clearTimerState();
       }
-      clearTimerState();
     }
 
     onMounted(() => {
