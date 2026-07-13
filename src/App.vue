@@ -85,7 +85,7 @@
     <!-- Toast Notification for Timer Alert -->
     <transition name="fade">
       <div v-if="showTimerToast" class="timer-toast">
-        ⏱️ Rest time complete! (15 seconds)
+        ⏱️ Rest time complete! (2 minutes)
       </div>
     </transition>
 
@@ -976,6 +976,7 @@ export default {
         localStorage.setItem('timerState', JSON.stringify({
           timerStartTime: timerStartTime,
           timerActive: timerActive.value,
+          timerSeconds: timerSeconds.value,
           notificationSent: notificationSent
         }));
       }
@@ -991,23 +992,33 @@ export default {
 
       try {
         const state = JSON.parse(saved);
-        const startTime = new Date(state.timerStartTime);
-        const now = new Date();
-        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        notificationSent = state.notificationSent || false;
 
-        // Only restore if elapsed time is reasonable (less than 1 hour)
-        if (elapsedSeconds >= 0 && elapsedSeconds < 3600) {
-          timerSeconds.value = elapsedSeconds;
-          timerStartTime = state.timerStartTime;
-          notificationSent = state.notificationSent || false;
-          
-          // Restore the exact state: if it was running, resume it; if it was paused, keep it paused
-          if (state.timerActive && (elapsedSeconds < 120 || !state.notificationSent)) {
+        if (state.timerActive && state.timerStartTime) {
+          const startTime = new Date(state.timerStartTime);
+          const now = new Date();
+          const elapsedSeconds = Math.floor((now - startTime) / 1000);
+
+          // Only restore if elapsed time is reasonable (less than 1 hour)
+          if (elapsedSeconds >= 0 && elapsedSeconds < 3600) {
+            timerSeconds.value = elapsedSeconds;
+            timerStartTime = state.timerStartTime;
+
+            // If threshold was crossed while app was backgrounded/closed, notify once on resume.
+            if (elapsedSeconds >= 120 && !notificationSent) {
+              notificationSent = true;
+              sendTimerNotification();
+              saveTimerState();
+            }
+
             toggleTimer(false);
+          } else {
+            clearTimerState();
           }
-        } else if (elapsedSeconds >= 3600) {
-          // Timer was running for more than 1 hour, discard it
-          clearTimerState();
+        } else {
+          timerActive.value = false;
+          timerSeconds.value = typeof state.timerSeconds === 'number' ? state.timerSeconds : 0;
+          timerStartTime = null;
         }
       } catch (e) {
         console.error('Error restoring timer state:', e);
@@ -1026,11 +1037,9 @@ export default {
           checkNotificationPermission();
         }
         timerActive.value = true;
-        
-        // Save the start time if this is a fresh start (not from restore)
-        if (!timerStartTime) {
-          timerStartTime = new Date().toISOString();
-        }
+
+        // Rebuild start time from displayed seconds so paused time is never counted.
+        timerStartTime = new Date(Date.now() - (timerSeconds.value * 1000)).toISOString();
         
         if (timerIntervalId) {
           clearInterval(timerIntervalId);
@@ -1054,13 +1063,7 @@ export default {
             console.log('Timer reached 120 seconds, sending notification');
             notificationSent = true;
             sendTimerNotification();
-            // Stop the timer after notification
-            timerActive.value = false;
-            if (timerIntervalId) {
-              clearInterval(timerIntervalId);
-              timerIntervalId = null;
-            }
-            clearTimerState();
+            saveTimerState();
           }
         }, 100);
         
@@ -1105,13 +1108,7 @@ export default {
             console.log('Timer reached 120 seconds, sending notification');
             notificationSent = true;
             sendTimerNotification();
-            // Stop the timer after notification
-            timerActive.value = false;
-            if (timerIntervalId) {
-              clearInterval(timerIntervalId);
-              timerIntervalId = null;
-            }
-            clearTimerState();
+            saveTimerState();
           }
         }, 100);
         
