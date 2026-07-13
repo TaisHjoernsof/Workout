@@ -1111,14 +1111,17 @@ input, select, textarea {
 .exercise-header {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 15px;
   gap: 10px;
+  width: 100%;
 }
 
 .exercise-name {
   font-size: 1.2em;
   font-weight: 600;
+  text-align: left;
+  width: 100%;
 }
 
 .sets-control {
@@ -1127,12 +1130,28 @@ input, select, textarea {
   gap: 10px;
 }
 
+.sets-control span {
+  font-size: 0.85em;
+  opacity: 0.9;
+  line-height: 1;
+}
+
 .sets-control input {
   width: 50px;
-  padding: 5px;
+  padding: 5px 4px;
   border: none;
   border-radius: 5px;
   text-align: center;
+  box-sizing: border-box;
+  line-height: 1;
+  text-align-last: center;
+  appearance: textfield;
+}
+
+.sets-control input::-webkit-outer-spin-button,
+.sets-control input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .sets-container {
@@ -1147,7 +1166,6 @@ input, select, textarea {
   gap: 10px;
   align-items: center;
   margin-bottom: 5px;
-  padding: 0 5px;
 }
 
 .set-header-label {
@@ -1155,6 +1173,10 @@ input, select, textarea {
   font-size: 0.9em;
   opacity: 0.8;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .set-row {
@@ -1168,6 +1190,10 @@ input, select, textarea {
   font-weight: 600;
   font-size: 0.9em;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .set-input {
@@ -1177,6 +1203,16 @@ input, select, textarea {
   background: rgba(255, 255, 255, 0.9);
   text-align: center;
   width: 100%;
+  box-sizing: border-box;
+  line-height: 1;
+  text-align-last: center;
+  appearance: textfield;
+}
+
+.set-input::-webkit-outer-spin-button,
+.set-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .save-workout-btn {
@@ -1194,6 +1230,23 @@ input, select, textarea {
 
 .save-workout-btn:active {
   background: rgba(76, 175, 80, 1);
+}
+
+.save-progress-btn {
+  background: rgba(255, 193, 7, 0.8);
+  border: none;
+  border-radius: 10px;
+  padding: 15px;
+  color: white;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.save-progress-btn:active {
+  background: rgba(255, 193, 7, 1);
 }
 
  .progress-btn {
@@ -1371,6 +1424,14 @@ input, select, textarea {
 
 /* Ensure inputs look good */
 .set-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9em;
+  line-height: 1;
+  text-align: center;
+  text-align-last: center;
+  appearance: textfield;
   color: #000; /* Black text for user-entered values */
   background: rgba(255, 255, 255, 0.95);
 }
@@ -1385,6 +1446,8 @@ input, select, textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-content: center;
+  width: 100%;
 }
 
 .video-btn {

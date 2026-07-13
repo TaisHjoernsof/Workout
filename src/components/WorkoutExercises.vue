@@ -238,6 +238,8 @@ export default {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
 }
 
 .arm-start-control {
@@ -253,11 +255,15 @@ export default {
 }
 
 .arm-start-input {
-  width: 38px;
+  width: 50px;
   padding: 5px 4px;
   border: none;
   border-radius: 5px;
   text-align: center;
+  box-sizing: border-box;
+  line-height: 1;
+  font: inherit;
+  font-size: 0.9em;
   text-transform: uppercase;
 }
 
@@ -313,6 +319,8 @@ export default {
   text-align: center;
   padding: 10px;
   font-size: 0.9em;
+}
+
 /* Collapsible panel styles */
 .collapse-btn {
   background: none;
@@ -326,6 +334,5 @@ export default {
 }
 .collapse-btn:hover {
   color: #22f0ff;
-}
 }
 </style>
