@@ -866,7 +866,7 @@ export default {
         navigator.serviceWorker.ready.then((registration) => {
           console.log('Service Worker ready, attempting notification via SW');
           registration.showNotification('Rest Time Complete! ⏱️', {
-            body: '15 seconds have passed',
+            body: '2 minutes have passed',
             icon: '/android-chrome-192x192.png',
             badge: '/favicon-32x32.png',
             tag: 'rest-timer',
@@ -894,7 +894,7 @@ export default {
             try {
               console.log('Sending regular notification...');
               new Notification('Rest Time Complete!', {
-                body: '15 seconds have passed - test notification',
+                body: '2 minutes have passed',
                 tag: 'rest-timer',
                 badge: '⏱️'
               });
@@ -1050,10 +1050,17 @@ export default {
           }
           
           // Send notification at 120 seconds (2 minutes)
-          if (elapsedSeconds === 120 && !notificationSent) {
+          if (elapsedSeconds >= 120 && !notificationSent) {
             console.log('Timer reached 120 seconds, sending notification');
             notificationSent = true;
             sendTimerNotification();
+            // Stop the timer after notification
+            timerActive.value = false;
+            if (timerIntervalId) {
+              clearInterval(timerIntervalId);
+              timerIntervalId = null;
+            }
+            clearTimerState();
           }
         }, 100);
         
@@ -1094,10 +1101,17 @@ export default {
           timerSeconds.value = elapsedSeconds;
           
           // Send notification at 120 seconds
-          if (elapsedSeconds === 120 && !notificationSent) {
+          if (elapsedSeconds >= 120 && !notificationSent) {
             console.log('Timer reached 120 seconds, sending notification');
             notificationSent = true;
             sendTimerNotification();
+            // Stop the timer after notification
+            timerActive.value = false;
+            if (timerIntervalId) {
+              clearInterval(timerIntervalId);
+              timerIntervalId = null;
+            }
+            clearTimerState();
           }
         }, 100);
         
