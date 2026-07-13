@@ -972,10 +972,10 @@ export default {
     }
 
     function saveTimerState() {
-      if (timerActive.value && timerStartTime) {
+      if (timerStartTime) {
         localStorage.setItem('timerState', JSON.stringify({
           timerStartTime: timerStartTime,
-          timerActive: true,
+          timerActive: timerActive.value,
           notificationSent: notificationSent
         }));
       }
@@ -995,16 +995,17 @@ export default {
         const now = new Date();
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
 
-        // Only restore if timer was active and elapsed time is reasonable (less than 1 hour)
-        if (state.timerActive && elapsedSeconds >= 0 && elapsedSeconds < 3600) {
+        // Only restore if elapsed time is reasonable (less than 1 hour)
+        if (elapsedSeconds >= 0 && elapsedSeconds < 3600) {
           timerSeconds.value = elapsedSeconds;
           timerStartTime = state.timerStartTime;
           notificationSent = state.notificationSent || false;
-          // Restore timer state without requesting permission automatically
-          if (elapsedSeconds < 120 || !state.notificationSent) {
+          
+          // Restore the exact state: if it was running, resume it; if it was paused, keep it paused
+          if (state.timerActive && (elapsedSeconds < 120 || !state.notificationSent)) {
             toggleTimer(false);
           }
-        } else if (state.timerActive && elapsedSeconds >= 3600) {
+        } else if (elapsedSeconds >= 3600) {
           // Timer was running for more than 1 hour, discard it
           clearTimerState();
         }
