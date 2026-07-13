@@ -1035,21 +1035,26 @@ export default {
           clearInterval(timerIntervalId);
         }
         
+        // Use elapsed time calculation for accurate timing
         timerIntervalId = setInterval(() => {
-          timerSeconds.value++;
+          const startTime = new Date(timerStartTime);
+          const now = new Date();
+          const elapsedSeconds = Math.floor((now - startTime) / 1000);
+          
+          timerSeconds.value = elapsedSeconds;
           
           // Debug: log every 5 seconds
-          if (timerSeconds.value % 5 === 0) {
-            console.log('Timer at:', timerSeconds.value, 'seconds. Notification sent:', notificationSent);
+          if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
+            console.log('Timer at:', elapsedSeconds, 'seconds. Notification sent:', notificationSent);
           }
           
           // Send notification at 15 seconds (testing)
-          if (timerSeconds.value === 15 && !notificationSent) {
+          if (elapsedSeconds === 15 && !notificationSent) {
             console.log('Timer reached 15 seconds, sending notification');
             notificationSent = true;
             sendTimerNotification();
           }
-        }, 1000);
+        }, 100);
         
         // Save timer state when started
         saveTimerState();
