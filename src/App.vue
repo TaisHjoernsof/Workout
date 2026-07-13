@@ -73,6 +73,22 @@
       <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
     </div>
 
+    <!-- Floating Rest Timer -->
+    <FloatingTimer 
+      v-if="currentScreen === 'arms' || currentScreen === 'chest' || currentScreen === 'legs'"
+      :seconds="timerSeconds"
+      :isActive="timerActive"
+      @start-timer="startTimer"
+      @reset-timer="resetTimer"
+    />
+
+    <!-- Toast Notification for Timer Alert -->
+    <transition name="fade">
+      <div v-if="showTimerToast" class="timer-toast">
+        ⏱️ Rest time complete! (15 seconds)
+      </div>
+    </transition>
+
     <!-- Screen 2: Arms & Shoulders Workout -->
     <div v-if="currentScreen === 'arms'" class="screen active">
       <div class="header">
@@ -180,16 +196,27 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
     }
 import WorkoutExercises from './components/WorkoutExercises.vue'
 import ProgressGraph from './components/ProgressGraph.vue'
+import FloatingTimer from './components/FloatingTimer.vue'
 
 export default {
   name: 'App',
   components: {
     WorkoutExercises,
-    ProgressGraph
+    ProgressGraph,
+    FloatingTimer
   },
   setup() {
     const currentScreen = ref('choose')
     let autoSaveInterval = null
+    
+    // Timer state
+    const timerSeconds = ref(0)
+    const timerActive = ref(false)
+    let timerIntervalId = null
+    let notificationSent = false
+    let timerStartTime = null // Tracks when timer was started (ISO string)
+    let hasShownNotificationSetupHint = false
+    const showTimerToast = ref(false)
     
     const workoutExercises = {
       arms: [
@@ -248,6 +275,10 @@ export default {
 
     function showScreen(screen) {
       currentScreen.value = screen;
+      // Reset timer when leaving active workout screens
+      if (screen !== 'arms' && screen !== 'chest' && screen !== 'legs') {
+        resetTimer();
+      }
       if (screen === 'progress') {
         loadProgressData();
       } else if (screen !== 'choose') {
@@ -433,6 +464,8 @@ export default {
     function autoSaveWorkout() {
       // Don't auto-save on the choose screen
       if (currentScreen.value === 'choose') return;
+      // Avoid creating restore prompts for empty/fresh sessions (e.g. timer only)
+      if (isFreshWorkout.value) return;
       
       const workoutType = currentScreen.value;
       const autoSaveData = {
@@ -458,14 +491,15 @@ export default {
           const hoursDiff = (now - saveTime) / (1000 * 60 * 60);
           
           if (hoursDiff < 2) { // Restore if less than 2 hours old
-            if (confirm('Found an unsaved workout from recently. Would you like to restore it?')) {
-              currentScreen.value = autoSaveData.screen;
-              currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
-              isFreshWorkout.value = autoSaveData.isFreshWorkout || false;
-            } else {
-              // Clear the auto-save if user doesn't want to restore
+            // Skip restore prompts for fresh sessions with no user-entered workout data
+            if (autoSaveData.isFreshWorkout) {
               clearAutoSave();
+              return;
             }
+            // Restore automatically to avoid repeated restore prompts on normal reopen
+            currentScreen.value = autoSaveData.screen;
+            currentWorkoutData.value[autoSaveData.workoutType] = autoSaveData.data;
+            isFreshWorkout.value = autoSaveData.isFreshWorkout || false;
           } else {
             // Clear old auto-saves
             clearAutoSave();
@@ -486,11 +520,15 @@ export default {
         console.log('App pausing, saving workout state...');
         autoSaveWorkout();
       }
+      // Save timer state when app pauses
+      saveTimerState();
     }
 
     function handleVisibilityChange() {
       if (document.hidden) {
         handleAppPause();
+        // Save timer state when app goes to background
+        saveTimerState();
       }
     }
 
@@ -766,9 +804,284 @@ export default {
       alert(`Downloaded ${workouts.length} workout sessions!`)
     }
 
+    // Timer functions
+    function showNotificationSetupHint(message) {
+      if (hasShownNotificationSetupHint) return;
+      hasShownNotificationSetupHint = true;
+      alert(message);
+    }
+
+    function checkNotificationPermission() {
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const isSecureContextForPush = window.isSecureContext || window.location.hostname === 'localhost';
+
+      if (!('Notification' in window)) {
+        console.log('Notification API NOT available on this device');
+        if (isIOS) {
+          showNotificationSetupHint('Notifications are not available in this context on iPhone. Open the installed Home Screen app and try again.');
+        }
+        return;
+      }
+
+      if (isIOS && !isStandalone) {
+        showNotificationSetupHint('On iPhone, notification permission works only in the installed Home Screen app. Use Safari -> Share -> Add to Home Screen, then open from your Home Screen.');
+        return;
+      }
+
+      if (!isSecureContextForPush) {
+        showNotificationSetupHint('Notifications require HTTPS. Your local network URL is HTTP, so iOS blocks notification permission. Use the installed app from a secure HTTPS URL (for example via a tunnel like ngrok or Cloudflare Tunnel).');
+        return;
+      }
+
+      console.log('Notification API available, current permission:', Notification.permission);
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          console.log('Notification permission result:', permission);
+          if (permission !== 'granted') {
+            alert('Notification permission was not granted. You can enable it later in iOS Settings -> Notifications for this app.');
+          }
+        }).catch((err) => {
+          console.error('Notification permission request failed:', err);
+          alert('Could not request notification permission on this device/context.');
+        });
+      }
+    }
+
+    function sendTimerNotification() {
+      console.log('Attempting to send notification. Notification API available:', 'Notification' in window);
+      
+      // Play vibration pattern (works on iOS and Android)
+      if (navigator.vibrate) {
+        // Vibrate pattern: 200ms on, 100ms off, 200ms on
+        navigator.vibrate([200, 100, 200]);
+        console.log('Vibration triggered');
+      }
+      
+      // Play sound notification
+      playNotificationSound();
+      
+      // Try service worker notification first (works even when app is backgrounded)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          console.log('Service Worker ready, attempting notification via SW');
+          registration.showNotification('Rest Time Complete! ⏱️', {
+            body: '15 seconds have passed',
+            icon: '/android-chrome-192x192.png',
+            badge: '/favicon-32x32.png',
+            tag: 'rest-timer',
+            requireInteraction: true,
+            vibrate: [200, 100, 200]
+          }).catch((err) => {
+            console.log('Service Worker notification failed:', err);
+            // Fallback to regular notification
+            sendRegularNotification();
+          });
+        }).catch((err) => {
+          console.log('Service Worker not ready:', err);
+          sendRegularNotification();
+        });
+      } else {
+        console.log('Service Worker not available');
+        sendRegularNotification();
+      }
+      
+      function sendRegularNotification() {
+        // Try browser notification
+        if ('Notification' in window) {
+          console.log('Notification permission:', Notification.permission);
+          if (Notification.permission === 'granted') {
+            try {
+              console.log('Sending regular notification...');
+              new Notification('Rest Time Complete!', {
+                body: '15 seconds have passed - test notification',
+                tag: 'rest-timer',
+                badge: '⏱️'
+              });
+              console.log('Notification sent successfully');
+            } catch (e) {
+              console.error('Notification error:', e);
+              // Fallback to toast if notification fails
+              showTimerToast.value = true;
+              setTimeout(() => {
+                showTimerToast.value = false;
+              }, 4000);
+            }
+          } else {
+            console.log('Notification permission not granted. Permission:', Notification.permission);
+            // Use toast as fallback
+            showTimerToast.value = true;
+            setTimeout(() => {
+              showTimerToast.value = false;
+            }, 4000);
+          }
+        } else {
+          console.log('Notification API not available, using toast fallback with vibration');
+          // Notification API not available, use toast
+          showTimerToast.value = true;
+          setTimeout(() => {
+            showTimerToast.value = false;
+          }, 4000);
+        }
+      }
+    }
+
+    function playNotificationSound() {
+      try {
+        // Create audio context for beep sound
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Set frequency and duration for notification beep
+        oscillator.frequency.value = 800; // Hz
+        oscillator.type = 'sine';
+        
+        // Create a beep: on for 100ms, off for 50ms, on for 100ms
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+        
+        // Second beep
+        setTimeout(() => {
+          try {
+            const osc2 = audioContext.createOscillator();
+            const gain2 = audioContext.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioContext.destination);
+            osc2.frequency.value = 900;
+            osc2.type = 'sine';
+            gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            osc2.start(audioContext.currentTime);
+            osc2.stop(audioContext.currentTime + 0.1);
+          } catch (e) {
+            console.log('Second beep error:', e);
+          }
+        }, 150);
+        
+        console.log('Notification sound played');
+      } catch (e) {
+        console.log('Audio notification not available:', e);
+      }
+    }
+
+    function saveTimerState() {
+      if (timerActive.value && timerStartTime) {
+        localStorage.setItem('timerState', JSON.stringify({
+          timerStartTime: timerStartTime,
+          timerActive: true,
+          notificationSent: notificationSent
+        }));
+      }
+    }
+
+    function clearTimerState() {
+      localStorage.removeItem('timerState');
+    }
+
+    function restoreTimerState() {
+      const saved = localStorage.getItem('timerState');
+      if (!saved) return;
+
+      try {
+        const state = JSON.parse(saved);
+        const startTime = new Date(state.timerStartTime);
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+
+        // Only restore if timer was active and elapsed time is reasonable (less than 1 hour)
+        if (state.timerActive && elapsedSeconds >= 0 && elapsedSeconds < 3600) {
+          timerSeconds.value = elapsedSeconds;
+          timerStartTime = state.timerStartTime;
+          notificationSent = state.notificationSent || false;
+          // Restore timer state without requesting permission automatically
+          if (elapsedSeconds < 15 || !state.notificationSent) {
+            toggleTimer(false);
+          }
+        } else if (state.timerActive && elapsedSeconds >= 3600) {
+          // Timer was running for more than 1 hour, discard it
+          clearTimerState();
+        }
+      } catch (e) {
+        console.error('Error restoring timer state:', e);
+        clearTimerState();
+      }
+    }
+
+    function startTimer() {
+      toggleTimer(true);
+    }
+
+    function toggleTimer(isUserAction = false) {
+      if (!timerActive.value) {
+        if (isUserAction) {
+          // Request notification permission only when the user explicitly starts the timer
+          checkNotificationPermission();
+        }
+        timerActive.value = true;
+        
+        // Save the start time if this is a fresh start (not from restore)
+        if (!timerStartTime) {
+          timerStartTime = new Date().toISOString();
+        }
+        
+        if (timerIntervalId) {
+          clearInterval(timerIntervalId);
+        }
+        
+        timerIntervalId = setInterval(() => {
+          timerSeconds.value++;
+          
+          // Debug: log every 5 seconds
+          if (timerSeconds.value % 5 === 0) {
+            console.log('Timer at:', timerSeconds.value, 'seconds. Notification sent:', notificationSent);
+          }
+          
+          // Send notification at 15 seconds (testing)
+          if (timerSeconds.value === 15 && !notificationSent) {
+            console.log('Timer reached 15 seconds, sending notification');
+            notificationSent = true;
+            sendTimerNotification();
+          }
+        }, 1000);
+        
+        // Save timer state when started
+        saveTimerState();
+      } else {
+        // Pause timer
+        timerActive.value = false;
+        if (timerIntervalId) {
+          clearInterval(timerIntervalId);
+          timerIntervalId = null;
+        }
+        
+        // Save paused state
+        saveTimerState();
+      }
+    }
+
+    function resetTimer() {
+      timerActive.value = false;
+      timerSeconds.value = 0;
+      notificationSent = false;
+      timerStartTime = null;
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        timerIntervalId = null;
+      }
+      clearTimerState();
+    }
+
     onMounted(() => {
       loadDefaultData()
       restoreAutoSavedWorkout()
+      restoreTimerState()
       updateStreak()
       updateTodayStatus()
       updateRestDayButton()
@@ -789,6 +1102,9 @@ export default {
     onUnmounted(() => {
       if (autoSaveInterval) {
         clearInterval(autoSaveInterval)
+      }
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId)
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('beforeunload', handleAppPause)
@@ -817,7 +1133,13 @@ export default {
       triggerFileInput,
       handleFileImport,
       progressData,
-      capitalize
+      capitalize,
+      timerSeconds,
+      timerActive,
+      startTimer,
+      toggleTimer,
+      resetTimer,
+      showTimerToast
     }
   }
 }
@@ -1225,5 +1547,46 @@ input, select, textarea {
   width: 100%;
   max-height: 300px;
   display: block;
+}
+
+.timer-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+  color: white;
+  padding: 20px 32px;
+  border-radius: 12px;
+  font-size: 1.3em;
+  font-weight: 700;
+  text-align: center;
+  z-index: 10000;
+  box-shadow: 0 8px 24px rgba(255, 0, 0, 0.4);
+  max-width: 90%;
+  animation: toastBounce 0.5s ease-out;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+}
+
+@keyframes toastBounce {
+  0% {
+    transform: translateX(-50%) translateY(-100px) scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(-50%) translateY(0) scale(1.05);
+  }
+  100% {
+    transform: translateX(-50%) translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>
