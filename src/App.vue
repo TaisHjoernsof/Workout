@@ -529,6 +529,19 @@ export default {
         handleAppPause();
         // Save timer state when app goes to background
         saveTimerState();
+      } else if (timerActive.value && timerStartTime) {
+        // iOS may throttle/suspend intervals in background; resync immediately on return.
+        const startTime = new Date(timerStartTime);
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+
+        timerSeconds.value = elapsedSeconds;
+
+        if (elapsedSeconds >= 120 && !notificationSent) {
+          notificationSent = true;
+          sendTimerNotification();
+          saveTimerState();
+        }
       }
     }
 
