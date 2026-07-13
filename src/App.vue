@@ -15,6 +15,7 @@
         <button class="workout-btn" @click="showScreen('arms')">Arms & Shoulders</button>
         <button class="workout-btn" @click="showScreen('chest')">Chest & Core</button>
         <button class="workout-btn" @click="showScreen('legs')">Legs</button>
+        <button class="workout-btn" @click="showScreen('run')">Run</button>
       </div>
       <button class="rest-day-btn" :class="{ 'enabled': restDayEnabled }" @click="logRestDay" :disabled="!restDayEnabled">
         {{ todayCompleted ? '✅ Today Completed' : 'Rest Day' }}
@@ -32,21 +33,22 @@
     <div v-if="currentScreen === 'progress'" class="screen active">
       <div class="header">
         <h1>Workout Progress</h1>
-        <div class="streak-hint">See your last set weight and reps for each exercise</div>
+        <div class="streak-hint">See trends for your saved workouts</div>
       </div>
-      <div v-for="workoutType in ['arms', 'chest', 'legs']" :key="workoutType" class="progress-section">
+      <div v-for="workoutType in ['arms', 'chest', 'legs', 'run']" :key="workoutType" class="progress-section">
         <h2 style="margin-top: 20px;">{{ capitalize(workoutType) }} Workouts</h2>
         <ProgressGraph
           v-if="progressData[workoutType].length > 0"
           :progressData="progressData[workoutType]"
           :exerciseList="workoutExercises[workoutType]"
+          :workoutType="workoutType"
         />
         <div v-if="progressData[workoutType].length === 0" class="streak-status status-pending">No history yet.</div>
         <details style="margin-top: 12px;" :open="false">
           <summary style="cursor:pointer;font-weight:500;font-size:1em;">Show {{ capitalize(workoutType) }} Progress Table</summary>
           <div v-if="progressData[workoutType].length > 0">
             <table class="progress-table">
-              <thead>
+              <thead v-if="workoutType !== 'run'">
                 <tr>
                   <th>Date</th>
                   <th>Exercise</th>
@@ -54,7 +56,15 @@
                   <th>Reps (All Sets)</th>
                 </tr>
               </thead>
-              <tbody>
+              <thead v-else>
+                <tr>
+                  <th>Date</th>
+                  <th>Exercise</th>
+                  <th>Length (km)</th>
+                  <th>Pace (min/km)</th>
+                </tr>
+              </thead>
+              <tbody v-if="workoutType !== 'run'">
                 <tr v-for="entry in progressData[workoutType]" :key="entry.date + entry.exercise">
                   <td>{{ entry.date }}</td>
                   <td>{{ entry.exercise }}</td>
@@ -64,6 +74,14 @@
                       <span v-if="idx > 0">, </span>{{ rep }}
                     </span>
                   </td>
+                </tr>
+              </tbody>
+              <tbody v-else>
+                <tr v-for="entry in progressData[workoutType]" :key="entry.date + entry.exercise">
+                  <td>{{ entry.date }}</td>
+                  <td>{{ entry.exercise }}</td>
+                  <td>{{ entry.lengthKm ?? '-' }}</td>
+                  <td>{{ entry.paceDisplay || '-' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -81,13 +99,13 @@
       </div>
 
       <div class="session-summary">
-        <div class="summary-pill summary-pill-weight">Weight Records: {{ sessionOverview.weightRecordCount }}</div>
-        <div class="summary-pill summary-pill-reps">Reps Records: {{ sessionOverview.repsRecordCount }}</div>
+        <div class="summary-pill summary-pill-weight">{{ sessionOverview.weightRecordLabel }}: {{ sessionOverview.weightRecordCount }}</div>
+        <div class="summary-pill summary-pill-reps">{{ sessionOverview.repsRecordLabel }}: {{ sessionOverview.repsRecordCount }}</div>
       </div>
 
       <div class="session-legend">
-        <span class="legend-item legend-weight">Green = Weight record</span>
-        <span class="legend-item legend-reps">Yellow = Reps record</span>
+        <span class="legend-item legend-weight">Green = {{ sessionOverview.weightLegendLabel }}</span>
+        <span class="legend-item" :class="sessionOverview.repsLegendClass">{{ sessionOverview.repsLegendColor }} = {{ sessionOverview.repsLegendLabel }}</span>
       </div>
 
       <div v-if="sessionOverview.exercises.length > 0">
@@ -103,12 +121,12 @@
           <div class="sets-container">
             <div class="set-header">
               <div class="set-header-label">Set</div>
-              <div class="set-header-label">Reps</div>
-              <div class="set-header-label">Weight</div>
+              <div class="set-header-label">{{ sessionOverview.repsColumnLabel }}</div>
+              <div class="set-header-label">{{ sessionOverview.weightColumnLabel }}</div>
             </div>
             <div v-for="set in exercise.sets" :key="set.id" class="set-row">
               <div class="set-label">{{ set.setNumber }}</div>
-              <div class="session-value" :class="{ 'record-reps': set.repsRecordBroken }">{{ set.repsDisplay }}</div>
+              <div class="session-value" :class="set.repsRecordBroken ? sessionOverview.repsRecordClass : ''">{{ set.repsDisplay }}</div>
               <div class="session-value" :class="{ 'record-weight': set.weightRecordBroken }">{{ set.weightDisplay }}</div>
             </div>
           </div>
@@ -191,16 +209,159 @@
       <button class="save-workout-btn" @click="saveWorkout('legs')">Save Workout</button>
       <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
     </div>
+
+    <!-- Screen 5: Run Workout -->
+    <div v-if="currentScreen === 'run'" class="screen active">
+      <div class="header">
+        <h1>Run</h1>
+        <p>Log your run after you finish</p>
+      </div>
+
+      <div class="exercise-panel">
+        <div class="exercise-header">
+          <div class="exercise-name">Run Details</div>
+        </div>
+        <div class="run-input-grid">
+          <label class="run-field">
+            <span>Length (km)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class="set-input"
+              :value="getRunLengthValue()"
+              :placeholder="getRunLengthPlaceholder()"
+              @input="updateRunLength($event.target.value)"
+            >
+          </label>
+          <label class="run-field">
+            <span>Time</span>
+            <div class="run-time-grid">
+              <input
+                type="number"
+                min="0"
+                class="set-input"
+                :value="getRunTimePart('hours')"
+                :placeholder="getRunTimePlaceholderPart('hours')"
+                @input="updateRunTimePart('hours', $event.target.value, $event)"
+                @blur="normalizeRunTimePart('hours')"
+              >
+              <input
+                type="number"
+                min="0"
+                max="59"
+                class="set-input"
+                :value="getRunTimePart('minutes')"
+                :placeholder="getRunTimePlaceholderPart('minutes')"
+                @input="updateRunTimePart('minutes', $event.target.value, $event)"
+                @blur="normalizeRunTimePart('minutes')"
+              >
+              <input
+                type="number"
+                min="0"
+                max="59"
+                class="set-input"
+                :value="getRunTimePart('seconds')"
+                :placeholder="getRunTimePlaceholderPart('seconds')"
+                @input="updateRunTimePart('seconds', $event.target.value, $event)"
+                @blur="normalizeRunTimePart('seconds')"
+              >
+            </div>
+          </label>
+        </div>
+        <div class="streak-hint" style="margin-top: 10px;">Fill out time after your run. Pace is calculated automatically.</div>
+      </div>
+
+      <button class="save-progress-btn" @click="autoSaveWorkout">💾 Save Progress</button>
+      <button class="save-workout-btn" @click="saveWorkout('run')">Save Workout</button>
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
+
+function parseHmsToSeconds(value) {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  const match = trimmed.match(/^(\d{1,2}):([0-5]\d):([0-5]\d)$/)
+  if (!match) {
+    return null
+  }
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  const seconds = Number(match[3])
+  return (hours * 3600) + (minutes * 60) + seconds
+}
+
+function formatSecondsToHms(totalSeconds) {
+  const safeSeconds = Number(totalSeconds)
+  if (!Number.isFinite(safeSeconds) || safeSeconds < 0) {
+    return '-'
+  }
+  const wholeSeconds = Math.round(safeSeconds)
+  const hours = Math.floor(wholeSeconds / 3600)
+  const minutes = Math.floor((wholeSeconds % 3600) / 60)
+  const seconds = wholeSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function formatPaceFromSecondsPerKm(secondsPerKm) {
+  const pace = Number(secondsPerKm)
+  if (!Number.isFinite(pace) || pace <= 0) {
+    return '-'
+  }
+  const totalSeconds = Math.round(pace)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function parseLengthValue(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null
+  }
+  return Math.round(numeric * 100) / 100
+}
+
+function getRunMetricsFromExercise(exData = {}) {
+  const lengthKm = parseLengthValue(exData.weight?.[0])
+  const storedTimeSeconds = Number(exData.reps?.[0])
+  const parsedFromHms = parseHmsToSeconds(exData.timeHms)
+  const timeSeconds = Number.isFinite(storedTimeSeconds) && storedTimeSeconds > 0
+    ? Math.round(storedTimeSeconds)
+    : parsedFromHms
+
+  if (!lengthKm || !timeSeconds || timeSeconds <= 0) {
+    return {
+      lengthKm,
+      timeSeconds,
+      paceSecPerKm: null,
+      paceDisplay: '-',
+      timeDisplay: formatSecondsToHms(timeSeconds)
+    }
+  }
+
+  const paceSecPerKm = timeSeconds / lengthKm
+  return {
+    lengthKm,
+    timeSeconds,
+    paceSecPerKm,
+    paceDisplay: formatPaceFromSecondsPerKm(paceSecPerKm),
+    timeDisplay: formatSecondsToHms(timeSeconds)
+  }
+}
+
     // Progress Data (reactive)
     const progressData = reactive({
       arms: [],
       chest: [],
-      legs: []
+      legs: [],
+      run: []
     })
     function capitalize(str) {
       return str.charAt(0).toUpperCase() + str.slice(1)
@@ -210,12 +371,14 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
       progressData.arms = [];
       progressData.chest = [];
       progressData.legs = [];
+      progressData.run = [];
       const workouts = JSON.parse(localStorage.getItem('workouts') || '[]');
       // Map workout type names to keys
       const typeMap = {
         'Arms & Shoulders': 'arms',
         'Chest & Core': 'chest',
-        'Legs': 'legs'
+        'Legs': 'legs',
+        'Run': 'run'
       };
       workouts.forEach(w => {
         const typeKey = typeMap[w.type];
@@ -223,6 +386,18 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
         // w.exercises is the data object
         Object.keys(w.exercises).forEach(exercise => {
           const exData = w.exercises[exercise];
+          if (typeKey === 'run') {
+            const runMetrics = getRunMetricsFromExercise(exData)
+            progressData.run.push({
+              date: new Date(w.date).toLocaleDateString(),
+              exercise,
+              lengthKm: runMetrics.lengthKm,
+              paceSecPerKm: runMetrics.paceSecPerKm,
+              paceDisplay: runMetrics.paceDisplay,
+              timeDisplay: runMetrics.timeDisplay
+            })
+            return
+          }
           const reps = exData.reps ? exData.reps.slice(0, 3).map(r => r ?? '-') : ['-', '-', '-'];
           const lastSetWeight = exData.weight && exData.weight.length > 0 ? exData.weight[exData.weight.length - 1] ?? '-' : '-';
           progressData[typeKey].push({
@@ -282,19 +457,24 @@ export default {
         "BB - Straight-Leg Deadlift",
         "DB - Standing Calf Raise",
         "DB - Reverse Calf Raise"
+      ],
+      run: [
+        "Run"
       ]
     }
 
     const defaultWorkoutData = ref({
       arms: {},
       chest: {},
-      legs: {}
+      legs: {},
+      run: {}
     })
 
     const currentWorkoutData = ref({
       arms: {},
       chest: {},
-      legs: {}
+      legs: {},
+      run: {}
     })
 
     // Streak and rest day functionality
@@ -314,13 +494,23 @@ export default {
       subtitle: '',
       exercises: [],
       weightRecordCount: 0,
-      repsRecordCount: 0
+      repsRecordCount: 0,
+      weightRecordLabel: 'Weight Records',
+      repsRecordLabel: 'Reps Records',
+      weightLegendLabel: 'Weight record',
+      repsLegendLabel: 'Reps record',
+      repsLegendColor: 'Yellow',
+      repsLegendClass: 'legend-reps',
+      repsRecordClass: 'record-reps',
+      weightColumnLabel: 'Weight',
+      repsColumnLabel: 'Reps'
     })
 
     const workoutTypeNames = {
       arms: 'Arms & Shoulders',
       chest: 'Chest & Core',
-      legs: 'Legs'
+      legs: 'Legs',
+      run: 'Run'
     }
 
     function parseNumber(value) {
@@ -344,6 +534,60 @@ export default {
     }
 
     function buildSessionOverview(workoutType, workoutDate, exercisesData, priorWorkout) {
+      if (workoutType === 'run') {
+        const exercises = []
+        let weightRecordCount = 0
+        let repsRecordCount = 0
+        const hasPriorWorkout = !!priorWorkout
+        const currentExercise = exercisesData.Run || {}
+        const priorExercise = priorWorkout?.exercises?.Run || {}
+        const currentMetrics = getRunMetricsFromExercise(currentExercise)
+        const priorMetrics = getRunMetricsFromExercise(priorExercise)
+
+        const lengthRecordBroken = hasPriorWorkout && currentMetrics.lengthKm !== null && priorMetrics.lengthKm !== null && currentMetrics.lengthKm > priorMetrics.lengthKm
+        const paceRecordBroken = hasPriorWorkout && currentMetrics.paceSecPerKm !== null && priorMetrics.paceSecPerKm !== null && currentMetrics.paceSecPerKm < priorMetrics.paceSecPerKm
+
+        if (lengthRecordBroken) {
+          weightRecordCount++
+        }
+        if (paceRecordBroken) {
+          repsRecordCount++
+        }
+
+        exercises.push({
+          name: 'Run',
+          sets: [
+            {
+              id: 'Run-1',
+              setNumber: 1,
+              weightDisplay: currentMetrics.lengthKm ?? '-',
+              repsDisplay: currentMetrics.paceDisplay,
+              weightRecordBroken: lengthRecordBroken,
+              repsRecordBroken: paceRecordBroken
+            }
+          ]
+        })
+
+        const subtitle = `${workoutTypeNames[workoutType]} • ${new Date(workoutDate).toLocaleString()}${hasPriorWorkout ? '' : ' • No prior session to compare'}`
+
+        sessionOverview.value = {
+          subtitle,
+          exercises,
+          weightRecordCount,
+          repsRecordCount,
+          weightRecordLabel: 'Length Records',
+          repsRecordLabel: 'Pace Records',
+          weightLegendLabel: 'Length record',
+          repsLegendLabel: 'Pace record',
+          repsLegendColor: 'Yellow',
+          repsLegendClass: 'legend-reps',
+          repsRecordClass: 'record-reps',
+          weightColumnLabel: 'Length (km)',
+          repsColumnLabel: 'Pace (min/km)'
+        }
+        return
+      }
+
       const exercises = []
       let weightRecordCount = 0
       let repsRecordCount = 0
@@ -402,15 +646,25 @@ export default {
         subtitle,
         exercises,
         weightRecordCount,
-        repsRecordCount
+        repsRecordCount,
+        weightRecordLabel: 'Weight Records',
+        repsRecordLabel: 'Reps Records',
+        weightLegendLabel: 'Weight record',
+        repsLegendLabel: 'Reps record',
+        repsLegendColor: 'Yellow',
+        repsLegendClass: 'legend-reps',
+        repsRecordClass: 'record-reps',
+        weightColumnLabel: 'Weight',
+        repsColumnLabel: 'Reps'
       }
     }
 
     function showScreen(screen) {
       currentScreen.value = screen;
-      const isWorkoutScreen = screen === 'arms' || screen === 'chest' || screen === 'legs'
-      // Reset timer when leaving active workout screens
-      if (!isWorkoutScreen) {
+      const isStrengthWorkoutScreen = screen === 'arms' || screen === 'chest' || screen === 'legs'
+      const isWorkoutScreen = isStrengthWorkoutScreen || screen === 'run'
+      // Reset timer when leaving strength workout screens
+      if (!isStrengthWorkoutScreen) {
         resetTimer();
       }
       if (screen === 'progress') {
@@ -434,7 +688,8 @@ export default {
       const workoutTypeNames = {
         arms: 'Arms & Shoulders',
         chest: 'Chest & Core',
-        legs: 'Legs'
+        legs: 'Legs',
+        run: 'Run'
       }
       
       const isDefaultValue = (field, value) => {
@@ -447,6 +702,35 @@ export default {
       }
       
       Object.keys(workoutExercises).forEach(workoutType => {
+        if (workoutType === 'run') {
+          const latestRunWorkout = workouts
+            .filter(w => w.type === workoutTypeNames.run)
+            .sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+
+          const latestRunExercise = latestRunWorkout?.exercises?.Run || {}
+          const latestRunLength = parseLengthValue(latestRunExercise.weight?.[0])
+          const latestRunSeconds = Number(latestRunExercise.reps?.[0])
+          const latestRunHms = Number.isFinite(latestRunSeconds) && latestRunSeconds >= 0
+            ? formatSecondsToHms(latestRunSeconds)
+            : (typeof latestRunExercise.timeHms === 'string' ? latestRunExercise.timeHms : '')
+
+          const [defaultHours = '', defaultMinutes = '', defaultSeconds = ''] = (latestRunHms || '').split(':')
+
+          defaultWorkoutData.value.run = {
+            Run: {
+              sets: 1,
+              reps: [Number.isFinite(latestRunSeconds) && latestRunSeconds >= 0 ? Math.round(latestRunSeconds) : null],
+              weight: [latestRunLength],
+              armStart: null,
+              timeHms: latestRunHms || '',
+              timeHours: defaultHours,
+              timeMinutes: defaultMinutes,
+              timeSeconds: defaultSeconds
+            }
+          }
+          return
+        }
+
         const workoutTypeName = workoutTypeNames[workoutType]
         
         // Sort workouts by date (newest first)
@@ -505,6 +789,22 @@ export default {
     function resetCurrentWorkoutData() {
       // Reset current data to empty structures (all nulls - user hasn't entered data yet)
       Object.keys(workoutExercises).forEach(workoutType => {
+        if (workoutType === 'run') {
+          currentWorkoutData.value.run = {
+            Run: {
+              sets: 1,
+              reps: [null],
+              weight: [null],
+              armStart: null,
+              timeHms: '',
+              timeHours: '',
+              timeMinutes: '',
+              timeSeconds: ''
+            }
+          }
+          return
+        }
+
         currentWorkoutData.value[workoutType] = {}
         workoutExercises[workoutType].forEach(exercise => {
           currentWorkoutData.value[workoutType][exercise] = {
@@ -522,6 +822,22 @@ export default {
     }
 
     function loadWorkoutData(workoutType) {
+      if (workoutType === 'run') {
+        currentWorkoutData.value.run = {
+          Run: {
+            sets: 1,
+            reps: [null],
+            weight: [null],
+            armStart: null,
+            timeHms: '',
+            timeHours: '',
+            timeMinutes: '',
+            timeSeconds: ''
+          }
+        }
+        return
+      }
+
       // Start with fresh workout data with empty inputs (all nulls)
       currentWorkoutData.value[workoutType] = {}
       workoutExercises[workoutType].forEach(exercise => {
@@ -581,6 +897,193 @@ export default {
       }, 500);
     }
 
+    function ensureRunExercise() {
+      if (!currentWorkoutData.value.run) {
+        currentWorkoutData.value.run = {}
+      }
+      if (!currentWorkoutData.value.run.Run) {
+        currentWorkoutData.value.run.Run = {
+          sets: 1,
+          reps: [null],
+          weight: [null],
+          armStart: null,
+          timeHms: '',
+          timeHours: '',
+          timeMinutes: '',
+          timeSeconds: ''
+        }
+      }
+
+      const runExercise = currentWorkoutData.value.run.Run
+      if ((runExercise.timeHours === undefined || runExercise.timeMinutes === undefined || runExercise.timeSeconds === undefined) && runExercise.timeHms) {
+        const [hours = '', minutes = '', seconds = ''] = String(runExercise.timeHms).split(':')
+        runExercise.timeHours = hours
+        runExercise.timeMinutes = minutes
+        runExercise.timeSeconds = seconds
+      }
+
+      return runExercise
+    }
+
+    function getRunLengthValue() {
+      const runExercise = ensureRunExercise()
+      const value = runExercise.weight?.[0]
+      return value === null || value === undefined ? '' : value
+    }
+
+    function getRunLengthPlaceholder() {
+      const defaultRun = defaultWorkoutData.value?.run?.Run
+      const value = defaultRun?.weight?.[0]
+      return value === null || value === undefined ? '5.00' : String(value)
+    }
+
+    function getRunTimePart(part) {
+      const runExercise = ensureRunExercise()
+      const hours = runExercise.timeHours || ''
+      const minutes = runExercise.timeMinutes || ''
+      const seconds = runExercise.timeSeconds || ''
+      if (part === 'hours') return hours
+      if (part === 'minutes') return minutes
+      if (part === 'seconds') return seconds
+      return ''
+    }
+
+    function getRunTimePlaceholderPart(part) {
+      const defaultRun = defaultWorkoutData.value?.run?.Run || {}
+      const hours = defaultRun.timeHours || ''
+      const minutes = defaultRun.timeMinutes || ''
+      const seconds = defaultRun.timeSeconds || ''
+
+      if (part === 'hours') {
+        return hours || 'Hours'
+      }
+      if (part === 'minutes') {
+        return minutes || 'Minutes'
+      }
+      if (part === 'seconds') {
+        return seconds || 'Seconds'
+      }
+      return ''
+    }
+
+    function composeRunTime(runExercise) {
+      const hoursRaw = String(runExercise.timeHours || '').trim()
+      const minutesRaw = String(runExercise.timeMinutes || '').trim()
+      const secondsRaw = String(runExercise.timeSeconds || '').trim()
+      const hasAnyPart = hoursRaw !== '' || minutesRaw !== '' || secondsRaw !== ''
+
+      if (!hasAnyPart) {
+        runExercise.timeHms = ''
+        runExercise.reps[0] = null
+        return
+      }
+
+      const parsePart = (raw, maxValue) => {
+        if (raw === '') {
+          return 0
+        }
+        const parsed = Number(raw)
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return 0
+        }
+        return Math.min(parsed, maxValue)
+      }
+
+      const hours = parsePart(hoursRaw, 99)
+      const minutes = parsePart(minutesRaw, 59)
+      const seconds = parsePart(secondsRaw, 59)
+
+      const normalized = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      runExercise.timeHms = normalized
+      runExercise.reps[0] = parseHmsToSeconds(normalized)
+    }
+
+    function updateRunLength(value) {
+      isFreshWorkout.value = false
+      const runExercise = ensureRunExercise()
+      if (value === '' || value === null || value === undefined) {
+        runExercise.weight[0] = null
+      } else {
+        const parsed = parseLengthValue(value)
+        runExercise.weight[0] = parsed
+      }
+
+      setTimeout(() => {
+        autoSaveWorkout()
+      }, 500)
+    }
+
+    function updateRunTimePart(part, value, event) {
+      isFreshWorkout.value = false
+      const runExercise = ensureRunExercise()
+      const safeValue = String(value || '').replace(/\D/g, '')
+
+      if (part === 'hours') {
+        runExercise.timeHours = safeValue.slice(0, 2)
+      }
+      if (part === 'minutes') {
+        runExercise.timeMinutes = safeValue.slice(0, 2)
+      }
+      if (part === 'seconds') {
+        runExercise.timeSeconds = safeValue.slice(0, 2)
+      }
+
+      composeRunTime(runExercise)
+
+      if (safeValue.length >= 2 && event?.target) {
+        const partWrap = event.target.parentElement
+        const nextPartWrap = partWrap?.nextElementSibling
+        const nextInput = nextPartWrap?.querySelector('input')
+        if (nextInput) {
+          nextInput.focus()
+        }
+      }
+
+      setTimeout(() => {
+        autoSaveWorkout()
+      }, 500)
+    }
+
+    function normalizeRunTimePart(part) {
+      const runExercise = ensureRunExercise()
+
+      if (part === 'hours' && runExercise.timeHours !== '') {
+        runExercise.timeHours = String(Math.min(Number(runExercise.timeHours), 99))
+      }
+      if (part === 'minutes' && runExercise.timeMinutes !== '') {
+        runExercise.timeMinutes = String(Math.min(Number(runExercise.timeMinutes), 59))
+      }
+      if (part === 'seconds' && runExercise.timeSeconds !== '') {
+        runExercise.timeSeconds = String(Math.min(Number(runExercise.timeSeconds), 59))
+      }
+
+      composeRunTime(runExercise)
+      setTimeout(() => {
+        autoSaveWorkout()
+      }, 500)
+    }
+
+    function validateRunWorkout() {
+      const runExercise = ensureRunExercise()
+      const lengthKm = parseLengthValue(runExercise.weight?.[0])
+      composeRunTime(runExercise)
+      const timeSeconds = parseHmsToSeconds(runExercise.timeHms)
+      if (!lengthKm) {
+        alert('Please enter a valid run length in km before saving.')
+        return false
+      }
+      if (!timeSeconds) {
+        alert('Please enter a valid run time in hh:mm:ss before saving.')
+        return false
+      }
+
+      runExercise.weight[0] = lengthKm
+      runExercise.reps[0] = timeSeconds
+      runExercise.sets = 1
+      runExercise.armStart = null
+      return true
+    }
+
     function updateSets(workoutType, exerciseName, newSetCount) {
       isFreshWorkout.value = false
       newSetCount = parseInt(newSetCount)
@@ -623,7 +1126,7 @@ export default {
 
     function autoSaveWorkout() {
       const workoutType = currentScreen.value;
-      const isWorkoutScreen = workoutType === 'arms' || workoutType === 'chest' || workoutType === 'legs'
+      const isWorkoutScreen = workoutType === 'arms' || workoutType === 'chest' || workoutType === 'legs' || workoutType === 'run'
       // Only auto-save active workout screens
       if (!isWorkoutScreen) return;
       // Avoid creating restore prompts for empty/fresh sessions (e.g. timer only)
@@ -701,6 +1204,10 @@ export default {
     }
 
     function saveWorkout(workoutType) {
+      if (workoutType === 'run' && !validateRunWorkout()) {
+        return
+      }
+
       const workoutName = workoutTypeNames[workoutType]
       const priorWorkout = getMostRecentPriorWorkout(workoutName)
       const workoutDate = new Date().toISOString()
@@ -1142,6 +1649,13 @@ export default {
       updateExerciseData,
       updateSets,
       saveWorkout,
+      getRunLengthValue,
+      getRunLengthPlaceholder,
+      getRunTimePart,
+      getRunTimePlaceholderPart,
+      updateRunLength,
+      updateRunTimePart,
+      normalizeRunTimePart,
       downloadWorkoutData,
       autoSaveWorkout,
       clearAutoSave,
@@ -1775,5 +2289,27 @@ input, select, textarea {
   background: rgba(255, 193, 7, 0.5);
   color: #3a2f00;
   font-weight: 700;
+}
+
+.run-input-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.run-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.92em;
+}
+
+.run-field span {
+  opacity: 0.92;
+}
+
+.run-time-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
 }
 </style>

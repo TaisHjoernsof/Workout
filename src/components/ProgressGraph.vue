@@ -13,8 +13,10 @@
         <label>
           Metric:
           <select v-model="selectedMetric" class="metric-select">
-            <option value="weight">Last Set Weight</option>
-            <option value="reps">Reps (All Sets)</option>
+            <option v-if="isRunWorkout" value="length">Length (km)</option>
+            <option v-if="isRunWorkout" value="pace">Pace (min/km)</option>
+            <option v-if="!isRunWorkout" value="weight">Last Set Weight</option>
+            <option v-if="!isRunWorkout" value="reps">Reps (All Sets)</option>
           </select>
         </label>
       </div>
@@ -33,15 +35,22 @@ export default {
     exerciseList: {
       type: Array,
       default: () => []
+    },
+    workoutType: {
+      type: String,
+      default: ''
     }
   },
   data() {
     return {
       selectedExercise: this.exerciseList[0] || '',
-      selectedMetric: 'weight',
+      selectedMetric: this.workoutType === 'run' ? 'length' : 'weight',
     }
   },
   computed: {
+    isRunWorkout() {
+      return this.workoutType === 'run';
+    },
     exercisesWithData() {
       const set = new Set(this.progressData.map(entry => entry.exercise));
       return this.exerciseList.filter(ex => set.has(ex));
@@ -54,6 +63,10 @@ export default {
     }
   },
   watch: {
+    workoutType() {
+      this.selectedMetric = this.isRunWorkout ? 'length' : 'weight';
+      this.drawGraph();
+    },
     selectedExercise() {
       this.drawGraph();
     },
@@ -110,6 +123,23 @@ export default {
     },
     ensureSelectedMetricHasData() {
       if (!this.hasData) return;
+      if (this.isRunWorkout) {
+        const lengthValues = this.filteredData
+          .map(entry => entry.lengthKm == null ? null : Number(entry.lengthKm))
+          .filter(v => v !== null && !Number.isNaN(v));
+        const paceValues = this.filteredData
+          .map(entry => entry.paceSecPerKm == null ? null : Number(entry.paceSecPerKm))
+          .filter(v => v !== null && !Number.isNaN(v));
+
+        if (this.selectedMetric === 'length' && lengthValues.length === 0 && paceValues.length > 0) {
+          this.selectedMetric = 'pace';
+        }
+        if (this.selectedMetric === 'pace' && paceValues.length === 0 && lengthValues.length > 0) {
+          this.selectedMetric = 'length';
+        }
+        return;
+      }
+
       const weightValues = this.filteredData
         .map(entry => entry.lastSetWeight === '-' || entry.lastSetWeight == null ? null : Number(entry.lastSetWeight))
         .filter(v => v !== null && !Number.isNaN(v));
@@ -134,7 +164,9 @@ export default {
       const h = canvas.height;
       const margin = 48;
       let dataSets = [];
-      const weights = this.filteredData.map(entry => entry.lastSetWeight === '-' || entry.lastSetWeight == null ? null : Number(entry.lastSetWeight));
+      const weights = this.isRunWorkout
+        ? []
+        : this.filteredData.map(entry => entry.lastSetWeight === '-' || entry.lastSetWeight == null ? null : Number(entry.lastSetWeight));
       if (this.selectedMetric === 'weight') {
         // Only one set for weight
         dataSets = [this.filteredData.map(entry => entry.lastSetWeight === '-' ? null : Number(entry.lastSetWeight))];
@@ -148,6 +180,10 @@ export default {
             return entry.reps[setIdx] === '-' || entry.reps[setIdx] == null ? null : Number(entry.reps[setIdx]);
           }));
         }
+      } else if (this.selectedMetric === 'length') {
+        dataSets = [this.filteredData.map(entry => entry.lengthKm == null ? null : Number(entry.lengthKm))];
+      } else if (this.selectedMetric === 'pace') {
+        dataSets = [this.filteredData.map(entry => entry.paceSecPerKm == null ? null : Number(entry.paceSecPerKm))];
       }
       const dates = this.filteredData.map(entry => entry.date);
       // Ensure validData is calculated correctly
@@ -183,6 +219,17 @@ export default {
         if (tickValues[tickValues.length - 1] !== maxTick) {
           tickValues.push(maxTick);
         }
+      } else if (this.selectedMetric === 'pace') {
+        const minTick = Math.floor(minY);
+        const maxTick = Math.ceil(maxY);
+        const range = Math.max(0, maxTick - minTick);
+        const step = Math.max(10, Math.ceil(range / 6 / 10) * 10);
+        for (let value = minTick; value <= maxTick; value += step) {
+          tickValues.push(value);
+        }
+        if (tickValues[tickValues.length - 1] !== maxTick) {
+          tickValues.push(maxTick);
+        }
       } else {
         const yTickCount = 5;
         const yTickStep = (maxY - minY || 1) / (yTickCount - 1);
@@ -205,7 +252,9 @@ export default {
         ctx.stroke();
         const label = this.selectedMetric === 'reps'
           ? String(Math.round(value))
-          : String(Math.round(value * 100) / 100);
+          : this.selectedMetric === 'pace'
+            ? `${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`
+            : String(Math.round(value * 100) / 100);
         ctx.fillText(label, margin - 10, y + 4);
       }
 
@@ -213,7 +262,11 @@ export default {
       ctx.font = '12px sans-serif';
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'right';
-      ctx.fillText(this.selectedMetric === 'weight' ? 'Weight' : 'Reps', margin - 8, margin - 18);
+      let yAxisLabel = 'Reps';
+      if (this.selectedMetric === 'weight') yAxisLabel = 'Weight';
+      if (this.selectedMetric === 'length') yAxisLabel = 'Length (km)';
+      if (this.selectedMetric === 'pace') yAxisLabel = 'Pace (min/km)';
+      ctx.fillText(yAxisLabel, margin - 8, margin - 18);
       ctx.textAlign = 'center';
       ctx.fillText('Date', w / 2, h - margin + 28);
       // Draw data points and lines
