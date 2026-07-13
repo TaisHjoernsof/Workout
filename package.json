@@ -8,10 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@upstash/qstash": "^2.11.1",
-    "@upstash/redis": "^1.38.0",
-    "vue": "^3.3.0",
-    "web-push": "^3.6.7"
+    "vue": "^3.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.0.0",

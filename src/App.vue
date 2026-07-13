@@ -82,13 +82,6 @@
       @reset-timer="resetTimer"
     />
 
-    <!-- Toast Notification for Timer Alert -->
-    <transition name="fade">
-      <div v-if="showTimerToast" class="timer-toast">
-        ⏱️ Rest time complete! (2 minutes)
-      </div>
-    </transition>
-
     <!-- Screen 2: Arms & Shoulders Workout -->
     <div v-if="currentScreen === 'arms'" class="screen active">
       <div class="header">
@@ -212,14 +205,8 @@ export default {
     // Timer state
     const timerSeconds = ref(0)
     const timerActive = ref(false)
-    const TIMER_ALERT_SECONDS = 120
     let timerIntervalId = null
-    let notificationSent = false
     let timerStartTime = null // Tracks when timer was started (ISO string)
-    let timerSessionId = null
-    let pushSubscription = null
-    let hasShownNotificationSetupHint = false
-    const showTimerToast = ref(false)
     
     const workoutExercises = {
       arms: [
@@ -539,12 +526,6 @@ export default {
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
 
         timerSeconds.value = elapsedSeconds;
-
-        if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
-          notificationSent = true;
-          sendTimerNotification();
-          saveTimerState();
-        }
       }
     }
 
@@ -821,269 +802,13 @@ export default {
     }
 
     // Timer functions
-    function showNotificationSetupHint(message) {
-      if (hasShownNotificationSetupHint) return;
-      hasShownNotificationSetupHint = true;
-      alert(message);
-    }
-
-    function urlBase64ToUint8Array(base64String) {
-      const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-      const rawData = window.atob(base64)
-      return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
-    }
-
-    async function ensurePushSubscription(isUserAction = false) {
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
-      const isSecureContextForPush = window.isSecureContext || window.location.hostname === 'localhost'
-
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        if (isIOS) {
-          showNotificationSetupHint('Push is unavailable in this context on iPhone. Open the installed Home Screen app and try again.')
-        }
-        return null
-      }
-
-      if (isIOS && !isStandalone) {
-        showNotificationSetupHint('On iPhone, push works only in the installed Home Screen app. Use Safari -> Share -> Add to Home Screen, then open from your Home Screen.')
-        return null
-      }
-
-      if (!isSecureContextForPush) {
-        showNotificationSetupHint('Push requires HTTPS. Open the app from a secure HTTPS URL.')
-        return null
-      }
-
-      if (Notification.permission === 'default' && isUserAction) {
-        const permission = await Notification.requestPermission()
-        if (permission !== 'granted') {
-          return null
-        }
-      }
-
-      if (Notification.permission !== 'granted') {
-        return null
-      }
-
-      const registration = await navigator.serviceWorker.ready
-      let subscription = await registration.pushManager.getSubscription()
-
-      if (!subscription) {
-        const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
-        if (!vapidPublicKey) {
-          console.warn('Missing VITE_VAPID_PUBLIC_KEY - backend push scheduling disabled')
-          return null
-        }
-
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-        })
-      }
-
-      pushSubscription = subscription
-
-      // Register/update subscription on backend (best-effort)
-      fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: subscription.toJSON() })
-      }).catch((err) => {
-        console.log('Subscription sync failed:', err)
-      })
-
-      return subscription
-    }
-
-    async function startServerTimerPush(delaySeconds, isUserAction = false) {
-      if (delaySeconds <= 0 || notificationSent) return
-
-      try {
-        const subscription = pushSubscription || await ensurePushSubscription(isUserAction)
-        if (!subscription) return
-
-        if (!timerSessionId) {
-          timerSessionId = crypto.randomUUID()
-        }
-
-        await fetch('/api/timer/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: timerSessionId,
-            delaySeconds,
-            subscription: subscription.toJSON(),
-            notification: {
-              title: 'Rest Time Complete! ⏱️',
-              body: '2 minutes have passed',
-              tag: 'rest-timer'
-            }
-          })
-        })
-      } catch (err) {
-        console.log('Failed to schedule server push:', err)
-      }
-    }
-
-    async function stopServerTimerPush() {
-      try {
-        const subscription = pushSubscription || await ensurePushSubscription(false)
-        if (!subscription || !timerSessionId) return
-
-        await fetch('/api/timer/stop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: timerSessionId,
-            endpoint: subscription.endpoint
-          })
-        })
-      } catch (err) {
-        console.log('Failed to cancel server push timer:', err)
-      }
-    }
-
-    async function checkNotificationPermission() {
-      try {
-        await ensurePushSubscription(true)
-      } catch (err) {
-        console.log('Notification permission/subscription check failed:', err)
-      }
-    }
-
-    function sendTimerNotification() {
-      console.log('Attempting to send notification. Notification API available:', 'Notification' in window);
-      
-      // Play vibration pattern (works on iOS and Android)
-      if (navigator.vibrate) {
-        // Vibrate pattern: 200ms on, 100ms off, 200ms on
-        navigator.vibrate([200, 100, 200]);
-        console.log('Vibration triggered');
-      }
-      
-      // Play sound notification
-      playNotificationSound();
-      
-      // Try service worker notification first (works even when app is backgrounded)
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((registration) => {
-          console.log('Service Worker ready, attempting notification via SW');
-          registration.showNotification('Rest Time Complete! ⏱️', {
-            body: '2 minutes have passed',
-            icon: '/android-chrome-192x192.png',
-            badge: '/favicon-32x32.png',
-            tag: 'rest-timer',
-            requireInteraction: true,
-            vibrate: [200, 100, 200]
-          }).catch((err) => {
-            console.log('Service Worker notification failed:', err);
-            // Fallback to regular notification
-            sendRegularNotification();
-          });
-        }).catch((err) => {
-          console.log('Service Worker not ready:', err);
-          sendRegularNotification();
-        });
-      } else {
-        console.log('Service Worker not available');
-        sendRegularNotification();
-      }
-      
-      function sendRegularNotification() {
-        // Try browser notification
-        if ('Notification' in window) {
-          console.log('Notification permission:', Notification.permission);
-          if (Notification.permission === 'granted') {
-            try {
-              console.log('Sending regular notification...');
-              new Notification('Rest Time Complete!', {
-                body: '2 minutes have passed',
-                tag: 'rest-timer',
-                badge: '⏱️'
-              });
-              console.log('Notification sent successfully');
-            } catch (e) {
-              console.error('Notification error:', e);
-              // Fallback to toast if notification fails
-              showTimerToast.value = true;
-              setTimeout(() => {
-                showTimerToast.value = false;
-              }, 4000);
-            }
-          } else {
-            console.log('Notification permission not granted. Permission:', Notification.permission);
-            // Use toast as fallback
-            showTimerToast.value = true;
-            setTimeout(() => {
-              showTimerToast.value = false;
-            }, 4000);
-          }
-        } else {
-          console.log('Notification API not available, using toast fallback with vibration');
-          // Notification API not available, use toast
-          showTimerToast.value = true;
-          setTimeout(() => {
-            showTimerToast.value = false;
-          }, 4000);
-        }
-      }
-    }
-
-    function playNotificationSound() {
-      try {
-        // Create audio context for beep sound
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Set frequency and duration for notification beep
-        oscillator.frequency.value = 800; // Hz
-        oscillator.type = 'sine';
-        
-        // Create a beep: on for 100ms, off for 50ms, on for 100ms
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        
-        // Second beep
-        setTimeout(() => {
-          try {
-            const osc2 = audioContext.createOscillator();
-            const gain2 = audioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(audioContext.destination);
-            osc2.frequency.value = 900;
-            osc2.type = 'sine';
-            gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-            osc2.start(audioContext.currentTime);
-            osc2.stop(audioContext.currentTime + 0.1);
-          } catch (e) {
-            console.log('Second beep error:', e);
-          }
-        }, 150);
-        
-        console.log('Notification sound played');
-      } catch (e) {
-        console.log('Audio notification not available:', e);
-      }
-    }
 
     function saveTimerState() {
       if (timerStartTime) {
         localStorage.setItem('timerState', JSON.stringify({
           timerStartTime: timerStartTime,
           timerActive: timerActive.value,
-          timerSeconds: timerSeconds.value,
-          timerSessionId: timerSessionId,
-          notificationSent: notificationSent
+          timerSeconds: timerSeconds.value
         }));
       }
     }
@@ -1098,8 +823,6 @@ export default {
 
       try {
         const state = JSON.parse(saved);
-        notificationSent = state.notificationSent || false;
-        timerSessionId = state.timerSessionId || null;
 
         if (state.timerActive && state.timerStartTime) {
           const startTime = new Date(state.timerStartTime);
@@ -1110,13 +833,6 @@ export default {
           if (elapsedSeconds >= 0 && elapsedSeconds < 3600) {
             timerSeconds.value = elapsedSeconds;
             timerStartTime = state.timerStartTime;
-
-            // If threshold was crossed while app was backgrounded/closed, notify once on resume.
-            if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
-              notificationSent = true;
-              sendTimerNotification();
-              saveTimerState();
-            }
 
             toggleTimer(false);
           } else {
@@ -1151,37 +867,19 @@ export default {
 
         // Debug: log every 5 seconds
         if (elapsedSeconds % 5 === 0 && elapsedSeconds > 0) {
-          console.log('Timer at:', elapsedSeconds, 'seconds. Notification sent:', notificationSent)
-        }
-
-        // Send notification at 120 seconds (2 minutes)
-        if (elapsedSeconds >= TIMER_ALERT_SECONDS && !notificationSent) {
-          console.log('Timer reached 120 seconds, sending notification')
-          notificationSent = true
-          sendTimerNotification()
-          saveTimerState()
+          console.log('Timer at:', elapsedSeconds, 'seconds')
         }
       }, 100)
     }
 
-    async function toggleTimer(isUserAction = false) {
+    function toggleTimer() {
       if (!timerActive.value) {
-        if (isUserAction) {
-          // Request notification permission only when the user explicitly starts the timer
-          await checkNotificationPermission();
-        }
         timerActive.value = true;
 
         // Rebuild start time from displayed seconds so paused time is never counted.
         timerStartTime = new Date(Date.now() - (timerSeconds.value * 1000)).toISOString();
 
         runTimerLoop();
-
-        if (!notificationSent) {
-          timerSessionId = crypto.randomUUID()
-          const remainingSeconds = Math.max(1, TIMER_ALERT_SECONDS - timerSeconds.value)
-          startServerTimerPush(remainingSeconds, isUserAction)
-        }
         
         // Save timer state when started
         saveTimerState();
@@ -1192,8 +890,6 @@ export default {
           clearInterval(timerIntervalId);
           timerIntervalId = null;
         }
-
-        stopServerTimerPush();
         
         // Save paused state
         saveTimerState();
@@ -1205,7 +901,6 @@ export default {
       
       // Reset to 00:00
       timerSeconds.value = 0;
-      notificationSent = false;
       timerStartTime = new Date().toISOString(); // Reset start time for accurate elapsed calculation
       
       if (wasRunning) {
@@ -1224,7 +919,6 @@ export default {
         }
         timerActive.value = false;
         timerStartTime = null;
-        timerSessionId = null;
         clearTimerState();
       }
     }
@@ -1289,8 +983,7 @@ export default {
       timerActive,
       startTimer,
       toggleTimer,
-      resetTimer,
-      showTimerToast
+      resetTimer
     }
   }
 }
