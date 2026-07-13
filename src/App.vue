@@ -381,6 +381,9 @@ function getRunMetricsFromExercise(exData = {}) {
         'Run': 'run'
       };
       workouts.forEach(w => {
+        const workoutDate = new Date(w.date);
+        const timestampMs = Number.isFinite(workoutDate.getTime()) ? workoutDate.getTime() : 0;
+        const displayDate = workoutDate.toLocaleDateString();
         const typeKey = typeMap[w.type];
         if (!typeKey) return;
         // w.exercises is the data object
@@ -389,7 +392,8 @@ function getRunMetricsFromExercise(exData = {}) {
           if (typeKey === 'run') {
             const runMetrics = getRunMetricsFromExercise(exData)
             progressData.run.push({
-              date: new Date(w.date).toLocaleDateString(),
+              date: displayDate,
+              timestampMs,
               exercise,
               lengthKm: runMetrics.lengthKm,
               paceSecPerKm: runMetrics.paceSecPerKm,
@@ -398,12 +402,21 @@ function getRunMetricsFromExercise(exData = {}) {
             })
             return
           }
-          const reps = exData.reps ? exData.reps.slice(0, 3).map(r => r ?? '-') : ['-', '-', '-'];
+          const reps = Array.from({ length: 4 }, (_, idx) => {
+            const value = exData.reps?.[idx];
+            return value ?? '-';
+          });
+          const weights = Array.from({ length: 4 }, (_, idx) => {
+            const value = exData.weight?.[idx];
+            return value ?? '-';
+          });
           const lastSetWeight = exData.weight && exData.weight.length > 0 ? exData.weight[exData.weight.length - 1] ?? '-' : '-';
           progressData[typeKey].push({
-            date: new Date(w.date).toLocaleDateString(),
+            date: displayDate,
+            timestampMs,
             exercise,
             lastSetWeight,
+            weights,
             reps
           });
         });

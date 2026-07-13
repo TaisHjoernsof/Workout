@@ -2,7 +2,17 @@
   <div class="progress-graph">
     <div v-if="!hasData" class="no-data">No data to display.</div>
     <div v-else>
-      <canvas ref="canvas" width="400" height="260"></canvas>
+      <canvas ref="canvas" :width="canvasWidth" :height="canvasHeight"></canvas>
+      <div v-if="!isRunWorkout" class="strength-legend" aria-label="Reps set color legend">
+        <span v-for="item in strengthSetLegend" :key="item.label" class="legend-chip">
+          <span class="legend-dot" :style="{ backgroundColor: item.color }"></span>
+          {{ item.label }}
+        </span>
+        <span class="legend-chip">
+          <span class="legend-line"></span>
+          Weight
+        </span>
+      </div>
       <div class="graph-controls">
         <label>
           Exercise:
@@ -10,13 +20,11 @@
             <option v-for="ex in exerciseList" :key="ex" :value="ex">{{ ex }}</option>
           </select>
         </label>
-        <label>
+        <label v-if="isRunWorkout">
           Metric:
           <select v-model="selectedMetric" class="metric-select">
             <option v-if="isRunWorkout" value="length">Length (km)</option>
             <option v-if="isRunWorkout" value="pace">Pace (min/km)</option>
-            <option v-if="!isRunWorkout" value="weight">Last Set Weight</option>
-            <option v-if="!isRunWorkout" value="reps">Reps (All Sets)</option>
           </select>
         </label>
       </div>
@@ -44,7 +52,8 @@ export default {
   data() {
     return {
       selectedExercise: this.exerciseList[0] || '',
-      selectedMetric: this.workoutType === 'run' ? 'length' : 'weight',
+      selectedMetric: this.workoutType === 'run' ? 'length' : '',
+      setColors: ['#4c6bf4', '#22f0ff', '#ffb347', '#ff4c4c']
     }
   },
   computed: {
@@ -56,15 +65,35 @@ export default {
       return this.exerciseList.filter(ex => set.has(ex));
     },
     filteredData() {
-      return this.progressData.filter(entry => entry.exercise === this.selectedExercise);
+      return this.progressData
+        .filter(entry => entry.exercise === this.selectedExercise)
+        .slice()
+        .sort((a, b) => {
+          const aTime = Number.isFinite(Number(a.timestampMs)) ? Number(a.timestampMs) : new Date(a.date).getTime();
+          const bTime = Number.isFinite(Number(b.timestampMs)) ? Number(b.timestampMs) : new Date(b.date).getTime();
+          return (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+        });
     },
     hasData() {
       return this.filteredData.length > 0;
+    },
+    canvasWidth() {
+      const count = Math.max(2, this.filteredData.length);
+      return Math.max(400, count * 72);
+    },
+    canvasHeight() {
+      return this.isRunWorkout ? 260 : 300;
+    },
+    strengthSetLegend() {
+      return this.setColors.map((color, idx) => ({
+        label: `Set ${idx + 1}`,
+        color
+      }));
     }
   },
   watch: {
     workoutType() {
-      this.selectedMetric = this.isRunWorkout ? 'length' : 'weight';
+      this.selectedMetric = this.isRunWorkout ? 'length' : '';
       this.drawGraph();
     },
     selectedExercise() {
@@ -121,35 +150,25 @@ export default {
         this.selectedExercise = this.exerciseList[0];
       }
     },
+    toNumber(value) {
+      if (value == null || value === '-') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    },
     ensureSelectedMetricHasData() {
-      if (!this.hasData) return;
-      if (this.isRunWorkout) {
-        const lengthValues = this.filteredData
-          .map(entry => entry.lengthKm == null ? null : Number(entry.lengthKm))
-          .filter(v => v !== null && !Number.isNaN(v));
-        const paceValues = this.filteredData
-          .map(entry => entry.paceSecPerKm == null ? null : Number(entry.paceSecPerKm))
-          .filter(v => v !== null && !Number.isNaN(v));
+      if (!this.hasData || !this.isRunWorkout) return;
+      const lengthValues = this.filteredData
+        .map(entry => this.toNumber(entry.lengthKm))
+        .filter(v => v !== null);
+      const paceValues = this.filteredData
+        .map(entry => this.toNumber(entry.paceSecPerKm))
+        .filter(v => v !== null);
 
-        if (this.selectedMetric === 'length' && lengthValues.length === 0 && paceValues.length > 0) {
-          this.selectedMetric = 'pace';
-        }
-        if (this.selectedMetric === 'pace' && paceValues.length === 0 && lengthValues.length > 0) {
-          this.selectedMetric = 'length';
-        }
-        return;
+      if (this.selectedMetric === 'length' && lengthValues.length === 0 && paceValues.length > 0) {
+        this.selectedMetric = 'pace';
       }
-
-      const weightValues = this.filteredData
-        .map(entry => entry.lastSetWeight === '-' || entry.lastSetWeight == null ? null : Number(entry.lastSetWeight))
-        .filter(v => v !== null && !Number.isNaN(v));
-      const repsValues = this.filteredData
-        .flatMap(entry => Array.isArray(entry.reps) ? entry.reps : [])
-        .map(rep => rep === '-' || rep == null ? null : Number(rep))
-        .filter(v => v !== null && !Number.isNaN(v));
-
-      if (this.selectedMetric === 'weight' && weightValues.length === 0 && repsValues.length > 0) {
-        this.selectedMetric = 'reps';
+      if (this.selectedMetric === 'pace' && paceValues.length === 0 && lengthValues.length > 0) {
+        this.selectedMetric = 'length';
       }
     },
     drawGraph() {
@@ -158,36 +177,30 @@ export default {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!this.hasData) return;
-      this.ensureSelectedMetricHasData();
-      // Prepare data
+
+      if (this.isRunWorkout) {
+        this.ensureSelectedMetricHasData();
+        this.drawRunGraph(ctx, canvas);
+        return;
+      }
+
+      this.drawStrengthGraph(ctx, canvas);
+    },
+    drawRunGraph(ctx, canvas) {
       const w = canvas.width;
       const h = canvas.height;
-      const margin = 48;
-      let dataSets = [];
-      const weights = this.isRunWorkout
-        ? []
-        : this.filteredData.map(entry => entry.lastSetWeight === '-' || entry.lastSetWeight == null ? null : Number(entry.lastSetWeight));
-      if (this.selectedMetric === 'weight') {
-        // Only one set for weight
-        dataSets = [this.filteredData.map(entry => entry.lastSetWeight === '-' ? null : Number(entry.lastSetWeight))];
-      } else if (this.selectedMetric === 'reps') {
-        // Show all sets for reps
-        // Find max set count
-        const maxSets = Math.max(...this.filteredData.map(entry => Array.isArray(entry.reps) ? entry.reps.length : 0));
-        for (let setIdx = 0; setIdx < maxSets; setIdx++) {
-          dataSets.push(this.filteredData.map(entry => {
-            if (!Array.isArray(entry.reps)) return null;
-            return entry.reps[setIdx] === '-' || entry.reps[setIdx] == null ? null : Number(entry.reps[setIdx]);
-          }));
-        }
-      } else if (this.selectedMetric === 'length') {
-        dataSets = [this.filteredData.map(entry => entry.lengthKm == null ? null : Number(entry.lengthKm))];
-      } else if (this.selectedMetric === 'pace') {
-        dataSets = [this.filteredData.map(entry => entry.paceSecPerKm == null ? null : Number(entry.paceSecPerKm))];
-      }
+      const marginLeft = 48;
+      const marginRight = 20;
+      const marginTop = 32;
+      const marginBottom = 56;
+      const plotHeight = h - marginTop - marginBottom;
+
+      const metricData = this.selectedMetric === 'pace'
+        ? this.filteredData.map(entry => this.toNumber(entry.paceSecPerKm))
+        : this.filteredData.map(entry => this.toNumber(entry.lengthKm));
       const dates = this.filteredData.map(entry => entry.date);
-      // Ensure validData is calculated correctly
-      const validData = dataSets.flat().filter(v => v !== null);
+
+      const validData = metricData.filter(v => v !== null);
       if (validData.length === 0) {
         ctx.font = '14px sans-serif';
         ctx.fillStyle = '#ffc107';
@@ -195,31 +208,20 @@ export default {
         ctx.fillText('No numeric data for this metric.', w / 2, h / 2);
         return;
       }
+
       const minY = Math.min(...validData);
       const maxY = Math.max(...validData);
-      // Draw axes
+
       ctx.strokeStyle = '#aaa';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(margin, margin);
-      ctx.lineTo(margin, h - margin);
-      ctx.lineTo(w - margin, h - margin);
+      ctx.moveTo(marginLeft, marginTop);
+      ctx.lineTo(marginLeft, h - marginBottom);
+      ctx.lineTo(w - marginRight, h - marginBottom);
       ctx.stroke();
 
-      // Draw y-axis ticks and labels
       const tickValues = [];
-      if (this.selectedMetric === 'reps') {
-        const minTick = Math.floor(minY);
-        const maxTick = Math.ceil(maxY);
-        const range = Math.max(0, maxTick - minTick);
-        const integerStep = Math.max(1, Math.ceil(range / 6));
-        for (let value = minTick; value <= maxTick; value += integerStep) {
-          tickValues.push(value);
-        }
-        if (tickValues[tickValues.length - 1] !== maxTick) {
-          tickValues.push(maxTick);
-        }
-      } else if (this.selectedMetric === 'pace') {
+      if (this.selectedMetric === 'pace') {
         const minTick = Math.floor(minY);
         const maxTick = Math.ceil(maxY);
         const range = Math.max(0, maxTick - minTick);
@@ -243,90 +245,401 @@ export default {
       ctx.textAlign = 'right';
       for (let i = 0; i < tickValues.length; i++) {
         const value = tickValues[i];
-        const y = h - margin - ((value - minY) / (maxY - minY || 1)) * (h - 2 * margin);
+        const y = h - marginBottom - ((value - minY) / (maxY - minY || 1)) * plotHeight;
         ctx.beginPath();
-        ctx.moveTo(margin - 6, y);
-        ctx.lineTo(margin, y);
+        ctx.moveTo(marginLeft - 6, y);
+        ctx.lineTo(marginLeft, y);
         ctx.strokeStyle = '#aaa';
         ctx.lineWidth = 1;
         ctx.stroke();
-        const label = this.selectedMetric === 'reps'
-          ? String(Math.round(value))
-          : this.selectedMetric === 'pace'
-            ? `${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`
-            : String(Math.round(value * 100) / 100);
-        ctx.fillText(label, margin - 10, y + 4);
+        const label = this.selectedMetric === 'pace'
+          ? `${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`
+          : String(Math.round(value * 100) / 100);
+        ctx.fillText(label, marginLeft - 10, y + 4);
       }
 
-      // Draw labels
       ctx.font = '12px sans-serif';
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'right';
-      let yAxisLabel = 'Reps';
-      if (this.selectedMetric === 'weight') yAxisLabel = 'Weight';
-      if (this.selectedMetric === 'length') yAxisLabel = 'Length (km)';
-      if (this.selectedMetric === 'pace') yAxisLabel = 'Pace (min/km)';
-      ctx.fillText(yAxisLabel, margin - 8, margin - 18);
+      const yAxisLabel = this.selectedMetric === 'pace' ? 'Pace (min/km)' : 'Length (km)';
+      ctx.fillText(yAxisLabel, marginLeft - 8, marginTop - 16);
       ctx.textAlign = 'center';
-      ctx.fillText('Date', w / 2, h - margin + 28);
-      // Draw data points and lines
+      ctx.fillText('Date', w / 2, h - marginBottom + 34);
+
       const n = dates.length;
-      const xStep = (w - 2 * margin) / (n - 1 || 1);
-      // Colors for sets
-      const setColors = ['#4c6bf4', '#22f0ff', '#ffb347', '#ff4c4c', '#7fff7f'];
-      for (let setIdx = 0; setIdx < dataSets.length; setIdx++) {
-        const data = dataSets[setIdx];
-        const baseColor = setColors[setIdx % setColors.length];
-        ctx.lineWidth = 2;
-        const points = [];
-        for (let i = 0; i < n; i++) {
-          if (data[i] === null) continue;
-          const x = margin + i * xStep;
-          const y = h - margin - ((data[i] - minY) / (maxY - minY || 1)) * (h - 2 * margin);
-          points.push({ i, x, y });
-        }
+      const plotWidth = w - marginLeft - marginRight;
+      const xStep = plotWidth / (n - 1 || 1);
+      const pointColor = '#22f0ff';
 
-        for (let p = 1; p < points.length; p++) {
-          const prev = points[p - 1];
-          const curr = points[p];
-          ctx.strokeStyle = baseColor;
-          ctx.beginPath();
-          ctx.moveTo(prev.x, prev.y);
-          ctx.lineTo(curr.x, curr.y);
-          ctx.stroke();
-        }
+      const points = [];
+      for (let i = 0; i < n; i++) {
+        if (metricData[i] === null) continue;
+        const x = marginLeft + i * xStep;
+        const y = h - marginBottom - ((metricData[i] - minY) / (maxY - minY || 1)) * plotHeight;
+        points.push({ i, x, y });
+      }
 
-        // Draw points
-        for (let p = 0; p < points.length; p++) {
-          const point = points[p];
-          const prevPoint = p > 0 ? points[p - 1] : null;
-          const pointWeightIncreased =
-            this.selectedMetric === 'reps' &&
-            prevPoint &&
-            weights[point.i] !== null &&
-            weights[prevPoint.i] !== null &&
-            weights[point.i] > weights[prevPoint.i];
+      ctx.strokeStyle = pointColor;
+      ctx.lineWidth = 2;
+      for (let p = 1; p < points.length; p++) {
+        ctx.beginPath();
+        ctx.moveTo(points[p - 1].x, points[p - 1].y);
+        ctx.lineTo(points[p].x, points[p].y);
+        ctx.stroke();
+      }
 
-          ctx.fillStyle = baseColor;
-          ctx.beginPath();
-          ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
-          ctx.fill();
-          if (pointWeightIncreased) {
-            this.drawStar(ctx, point.x, point.y, 2.4);
-          }
-          // Date label rotated 45 degrees
-          if (setIdx === 0) {
-            ctx.save();
-            ctx.translate(point.x, h - margin + 12);
-            ctx.rotate(-Math.PI / 4);
-            ctx.font = '10px sans-serif';
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'right';
-            ctx.fillText(dates[point.i], 0, 0);
-            ctx.restore();
-          }
+      ctx.fillStyle = pointColor;
+      for (let p = 0; p < points.length; p++) {
+        const point = points[p];
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(point.x, h - marginBottom + 12);
+        ctx.rotate(-Math.PI / 4);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'right';
+        ctx.fillText(dates[point.i], 0, 0);
+        ctx.restore();
+      }
+    },
+    drawStrengthGraph(ctx, canvas) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const marginLeft = 50;
+      const marginRight = 56;
+      const marginTop = 28;
+      const marginBottom = 66;
+      const plotWidth = w - marginLeft - marginRight;
+      const plotHeight = h - marginTop - marginBottom;
+      const yBottom = h - marginBottom;
+
+      const dates = this.filteredData.map(entry => entry.date);
+      const n = dates.length;
+      const xStep = plotWidth / (n - 1 || 1);
+
+      const repsBySet = Array.from({ length: 4 }, (_, setIdx) =>
+        this.filteredData.map(entry => {
+          if (!Array.isArray(entry.reps)) return null;
+          return this.toNumber(entry.reps[setIdx]);
+        })
+      );
+      const weightsBySet = Array.from({ length: 4 }, (_, setIdx) =>
+        this.filteredData.map(entry => {
+          if (!Array.isArray(entry.weights)) return null;
+          return this.toNumber(entry.weights[setIdx]);
+        })
+      );
+      const weightData = this.filteredData.map(entry => this.toNumber(entry.lastSetWeight));
+
+      const hasAnyRep = repsBySet.some(setValues => setValues.some(v => v !== null));
+      const weightValues = [
+        ...weightData.filter(v => v !== null),
+        ...weightsBySet.flat().filter(v => v !== null)
+      ];
+      if (!hasAnyRep && weightValues.length === 0) {
+        ctx.font = '14px sans-serif';
+        ctx.fillStyle = '#ffc107';
+        ctx.textAlign = 'center';
+        ctx.fillText('No numeric data for this exercise.', w / 2, h / 2);
+        return;
+      }
+
+      const repsToY = (value) => {
+        const clamped = Math.max(0, Math.min(12, value));
+        return yBottom - (clamped / 12) * plotHeight;
+      };
+
+      // Highlight low-rep threshold zone from 0 to 8 reps.
+      const repsThresholdTopY = repsToY(8);
+      ctx.fillStyle = 'rgba(255, 80, 80, 0.20)';
+      ctx.fillRect(marginLeft, repsThresholdTopY, w - marginLeft - marginRight, yBottom - repsThresholdTopY);
+
+      // Highlight high-rep threshold zone from 12 reps to y-max.
+      const repsHighThresholdBottomY = repsToY(12);
+      const repsHighThresholdTopY = marginTop;
+      // With fixed 0-12 scaling, 12 maps to y-max and this zone can collapse to ~0px.
+      // Keep a visible cap so the threshold is still readable.
+      const rawHighThresholdHeight = repsHighThresholdBottomY - repsHighThresholdTopY;
+      const repsHighThresholdHeight = Math.max(10, rawHighThresholdHeight);
+      ctx.fillStyle = 'rgba(80, 200, 120, 0.20)';
+      ctx.fillRect(marginLeft, repsHighThresholdTopY, w - marginLeft - marginRight, repsHighThresholdHeight);
+
+      let minWeight = 0;
+      let maxWeight = 1;
+      if (weightValues.length > 0) {
+        const rawMin = Math.min(...weightValues);
+        const rawMax = Math.max(...weightValues);
+        if (rawMin === rawMax) {
+          const pad = Math.max(1, Math.abs(rawMin) * 0.05);
+          minWeight = rawMin - pad;
+          maxWeight = rawMax + pad;
+        } else {
+          const pad = Math.max(0.5, (rawMax - rawMin) * 0.08);
+          minWeight = rawMin - pad;
+          maxWeight = rawMax + pad;
         }
       }
+
+      let weightTicks = [];
+      let axisMinWeight = minWeight;
+      let axisMaxWeight = maxWeight;
+      if (weightValues.length > 0) {
+        const weightTickMin = Math.floor(minWeight);
+        const weightTickMax = Math.ceil(maxWeight);
+        axisMinWeight = weightTickMin;
+        axisMaxWeight = weightTickMax;
+        const desiredTickCount = 6;
+        const tickStep = Math.max(1, Math.ceil((weightTickMax - weightTickMin) / (desiredTickCount - 1 || 1)));
+        for (let value = weightTickMin; value <= weightTickMax; value += tickStep) {
+          weightTicks.push(value);
+        }
+        if (weightTicks.length === 0 || weightTicks[weightTicks.length - 1] !== weightTickMax) {
+          weightTicks.push(weightTickMax);
+        }
+      }
+
+      const weightToY = (value) => {
+        if (axisMaxWeight === axisMinWeight) return marginTop + (plotHeight / 2);
+        return yBottom - ((value - axisMinWeight) / (axisMaxWeight - axisMinWeight)) * plotHeight;
+      };
+      const topWeightY = Math.round(weightToY(axisMaxWeight)) + 0.5;
+      const bottomWeightY = Math.round(weightToY(axisMinWeight)) + 0.5;
+      const minLabelY = topWeightY + 6;
+      const maxLabelY = bottomWeightY - 6;
+
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(marginLeft, marginTop);
+      ctx.lineTo(marginLeft, yBottom);
+      ctx.lineTo(w - marginRight, yBottom);
+      ctx.lineTo(w - marginRight, marginTop);
+      ctx.stroke();
+
+      if (weightValues.length > 0) {
+        for (let i = 0; i < weightTicks.length; i++) {
+          const value = weightTicks[i];
+          const y = Math.round(weightToY(value)) + 0.5;
+
+          // Left axis tick marks and labels for weight
+          ctx.beginPath();
+          ctx.moveTo(marginLeft - 6, y);
+          ctx.lineTo(marginLeft, y);
+          ctx.strokeStyle = '#aaa';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Weight grid lines
+          ctx.beginPath();
+          ctx.moveTo(marginLeft, y);
+          ctx.lineTo(w - marginRight, y);
+          ctx.strokeStyle = i === 0 ? '#8d939e' : 'rgba(141, 147, 158, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Right axis tick marks aligned with weight for reference
+          ctx.beginPath();
+          ctx.moveTo(w - marginRight, y);
+          ctx.lineTo(w - marginRight + 6, y);
+          ctx.strokeStyle = '#aaa';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      const repTicks = [0, 2, 4, 6, 8, 10, 12];
+      const repMinorTicks = [1, 3, 5, 7, 9, 11];
+
+      for (let i = 0; i < n; i++) {
+        const x = marginLeft + i * xStep;
+        const groupWidth = Math.min(34, (n > 1 ? xStep * 0.72 : 34));
+        const barGap = 2;
+        const barWidth = Math.max(2, (groupWidth - (3 * barGap)) / 4);
+        const startX = x - groupWidth / 2;
+
+        for (let setIdx = 0; setIdx < 4; setIdx++) {
+          const repValue = repsBySet[setIdx][i];
+          if (repValue === null) continue;
+          const y = repsToY(repValue);
+          const height = yBottom - y;
+          if (height <= 0) continue;
+          const rawBarX = startX + setIdx * (barWidth + barGap);
+
+          ctx.fillStyle = this.setColors[setIdx];
+          ctx.fillRect(rawBarX, y, barWidth, height);
+        }
+
+        ctx.fillStyle = '#d8dee8';
+        ctx.beginPath();
+        ctx.arc(x, yBottom, 2.2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(x, yBottom + 12);
+        ctx.rotate(-Math.PI / 4);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'right';
+        ctx.fillText(dates[i], 0, 0);
+        ctx.restore();
+      }
+
+      // Draw even-numbered rep guide lines as major grid lines above bars.
+      for (let i = 0; i < repTicks.length; i++) {
+        const y = Math.round(repsToY(repTicks[i])) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(w - marginRight, y);
+        ctx.strokeStyle = i === 0 ? 'rgba(216, 224, 236, 0.65)' : 'rgba(216, 224, 236, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Draw odd-numbered rep guide lines as an overlay so they remain visible above bars.
+      ctx.save();
+      ctx.setLineDash([3, 4]);
+      for (let i = 0; i < repMinorTicks.length; i++) {
+        const y = Math.round(repsToY(repMinorTicks[i])) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(w - marginRight, y);
+        ctx.strokeStyle = 'rgba(225, 232, 243, 0.32)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      const weightPointsByEntry = [];
+      for (let i = 0; i < n; i++) {
+        const x = marginLeft + i * xStep;
+        const groupWidth = Math.min(34, (n > 1 ? xStep * 0.72 : 34));
+        const barGap = 2;
+        const barWidth = Math.max(2, (groupWidth - (3 * barGap)) / 4);
+        const startX = x - groupWidth / 2;
+
+        const groupedByWeight = new Map();
+        for (let setIdx = 0; setIdx < 4; setIdx++) {
+          const setWeight = weightsBySet[setIdx][i];
+          if (setWeight === null) continue;
+          const key = String(setWeight);
+          if (!groupedByWeight.has(key)) {
+            groupedByWeight.set(key, { weight: setWeight, xCenters: [], firstSetIdx: setIdx });
+          }
+          const group = groupedByWeight.get(key);
+          group.xCenters.push(startX + setIdx * (barWidth + barGap) + (barWidth / 2));
+          group.firstSetIdx = Math.min(group.firstSetIdx, setIdx);
+        }
+
+        const points = Array.from(groupedByWeight.values())
+          .sort((a, b) => a.firstSetIdx - b.firstSetIdx)
+          .map(group => {
+            const centerX = group.xCenters.reduce((sum, value) => sum + value, 0) / group.xCenters.length;
+            return {
+              x: centerX,
+              y: weightToY(group.weight)
+            };
+          });
+
+        if (points.length === 0) {
+          const fallbackWeight = weightData[i];
+          if (fallbackWeight !== null) {
+            points.push({ x, y: weightToY(fallbackWeight) });
+          }
+        }
+
+        weightPointsByEntry.push(points);
+      }
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      let previousPoint = null;
+      for (let i = 0; i < n; i++) {
+        const pointsForEntry = weightPointsByEntry[i];
+        if (!pointsForEntry || pointsForEntry.length === 0) {
+          previousPoint = null;
+          continue;
+        }
+
+        for (let p = 0; p < pointsForEntry.length; p++) {
+          const point = pointsForEntry[p];
+          if (previousPoint) {
+            ctx.beginPath();
+            ctx.moveTo(previousPoint.x, previousPoint.y);
+            ctx.lineTo(point.x, point.y);
+            ctx.stroke();
+          }
+          previousPoint = point;
+        }
+      }
+
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < n; i++) {
+        const pointsForEntry = weightPointsByEntry[i];
+        if (!pointsForEntry || pointsForEntry.length === 0) continue;
+        for (let p = 0; p < pointsForEntry.length; p++) {
+          const point = pointsForEntry[p];
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 3.5, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
+
+      // Repaint axis ticks and labels on top so bars stay visually behind label text.
+      if (weightValues.length > 0) {
+        ctx.font = '11px sans-serif';
+        for (let i = 0; i < weightTicks.length; i++) {
+          const value = weightTicks[i];
+          const y = Math.round(weightToY(value)) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(marginLeft - 6, y);
+          ctx.lineTo(marginLeft, y);
+          ctx.strokeStyle = '#aaa';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          const labelY = Math.max(minLabelY, Math.min(maxLabelY, y));
+          ctx.fillText(String(value), marginLeft - 10, labelY);
+        }
+      }
+
+      ctx.font = '11px sans-serif';
+      for (let i = 0; i < repTicks.length; i++) {
+        const value = repTicks[i];
+        const y = Math.round(repsToY(value)) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(w - marginRight, y);
+        ctx.lineTo(w - marginRight + 6, y);
+        ctx.strokeStyle = '#aaa';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const labelY = Math.max(minLabelY, Math.min(maxLabelY, y));
+        ctx.fillText(String(value), w - marginRight + 10, labelY);
+      }
+
+      ctx.textBaseline = 'alphabetic';
+
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.fillText('Weight', marginLeft - 8, marginTop - 10);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('Reps', w - marginRight + 10, marginTop - 10);
+
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText('Date', w / 2, h - 18);
     }
   }
 }
@@ -347,6 +660,35 @@ export default {
   text-align: center;
   font-size: 1em;
   margin: 20px 0;
+}
+.strength-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ecf3ff;
+  font-size: 0.92em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend-line {
+  width: 16px;
+  height: 2px;
+  background: #fff;
+  display: inline-block;
 }
 /* Improved alignment for graph controls */
 /* Left-align graph controls */
@@ -407,6 +749,13 @@ select {
 @media (max-width: 600px) {
   .progress-graph {
     padding: 8px;
+  }
+  .strength-legend {
+    gap: 6px;
+  }
+  .legend-chip {
+    font-size: 0.86em;
+    padding: 3px 7px;
   }
   .graph-controls {
     gap: 6px;
