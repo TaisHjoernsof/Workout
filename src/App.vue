@@ -73,6 +73,53 @@
       <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
     </div>
 
+    <!-- Session Overview Screen -->
+    <div v-if="currentScreen === 'session-overview'" class="screen active">
+      <div class="header">
+        <h1>Session Overview</h1>
+        <div class="streak-hint">{{ sessionOverview.subtitle }}</div>
+      </div>
+
+      <div class="session-summary">
+        <div class="summary-pill summary-pill-weight">Weight Records: {{ sessionOverview.weightRecordCount }}</div>
+        <div class="summary-pill summary-pill-reps">Reps Records: {{ sessionOverview.repsRecordCount }}</div>
+      </div>
+
+      <div class="session-legend">
+        <span class="legend-item legend-weight">Green = Weight record</span>
+        <span class="legend-item legend-reps">Yellow = Reps record</span>
+      </div>
+
+      <div v-if="sessionOverview.exercises.length > 0">
+        <div v-for="exercise in sessionOverview.exercises" :key="exercise.name" class="exercise-panel session-exercise-panel">
+          <div class="exercise-header">
+            <div class="exercise-name">{{ exercise.name }}</div>
+            <div class="sets-control">
+              <span>Sets:</span>
+              <span class="session-set-count">{{ exercise.sets.length }}</span>
+            </div>
+          </div>
+
+          <div class="sets-container">
+            <div class="set-header">
+              <div class="set-header-label">Set</div>
+              <div class="set-header-label">Reps</div>
+              <div class="set-header-label">Weight</div>
+            </div>
+            <div v-for="set in exercise.sets" :key="set.id" class="set-row">
+              <div class="set-label">{{ set.setNumber }}</div>
+              <div class="session-value" :class="{ 'record-reps': set.repsRecordBroken }">{{ set.repsDisplay }}</div>
+              <div class="session-value" :class="{ 'record-weight': set.weightRecordBroken }">{{ set.weightDisplay }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="streak-status status-pending">No sets available for this saved session.</div>
+
+      <button class="back-btn" @click="showScreen('choose')">← Back to Workouts</button>
+    </div>
+
     <!-- Floating Rest Timer -->
     <FloatingTimer 
       v-if="currentScreen === 'arms' || currentScreen === 'chest' || currentScreen === 'legs'"
@@ -263,15 +310,112 @@ export default {
     // Track if we're starting a fresh workout or restoring auto-save
     const isFreshWorkout = ref(true)
 
+    const sessionOverview = ref({
+      subtitle: '',
+      exercises: [],
+      weightRecordCount: 0,
+      repsRecordCount: 0
+    })
+
+    const workoutTypeNames = {
+      arms: 'Arms & Shoulders',
+      chest: 'Chest & Core',
+      legs: 'Legs'
+    }
+
+    function parseNumber(value) {
+      if (value === null || value === undefined || value === '') {
+        return null
+      }
+      const num = Number(value)
+      return Number.isFinite(num) ? num : null
+    }
+
+    function formatSetValue(value) {
+      const parsed = parseNumber(value)
+      return parsed === null ? '-' : parsed
+    }
+
+    function getMostRecentPriorWorkout(workoutName) {
+      const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
+      return workouts
+        .filter((w) => w.type === workoutName)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null
+    }
+
+    function buildSessionOverview(workoutType, workoutDate, exercisesData, priorWorkout) {
+      const exercises = []
+      let weightRecordCount = 0
+      let repsRecordCount = 0
+      const hasPriorWorkout = !!priorWorkout
+
+      workoutExercises[workoutType].forEach((exercise) => {
+        const currentExercise = exercisesData[exercise] || {}
+        const setCount = Number(currentExercise.sets) || 0
+        const priorExercise = priorWorkout?.exercises?.[exercise] || {}
+
+        const sets = []
+
+        for (let setIndex = 0; setIndex < setCount; setIndex++) {
+          const currentWeight = parseNumber(currentExercise.weight?.[setIndex])
+          const currentReps = parseNumber(currentExercise.reps?.[setIndex])
+          const priorWeight = parseNumber(priorExercise.weight?.[setIndex])
+          const priorReps = parseNumber(priorExercise.reps?.[setIndex])
+
+          let weightRecordBroken = false
+          let repsRecordBroken = false
+
+          if (hasPriorWorkout && currentWeight !== null && currentReps !== null && currentReps > 0 && priorWeight !== null) {
+            if (currentWeight > priorWeight) {
+              weightRecordBroken = true
+            } else if (currentWeight === priorWeight && priorReps !== null && currentReps > priorReps) {
+              repsRecordBroken = true
+            }
+          }
+
+          if (weightRecordBroken) {
+            weightRecordCount++
+          }
+          if (repsRecordBroken) {
+            repsRecordCount++
+          }
+
+          sets.push({
+            id: `${exercise}-${setIndex + 1}`,
+            setNumber: setIndex + 1,
+            weightDisplay: formatSetValue(currentWeight),
+            repsDisplay: formatSetValue(currentReps),
+            weightRecordBroken,
+            repsRecordBroken
+          })
+        }
+
+        exercises.push({
+          name: exercise,
+          sets
+        })
+      })
+
+      const subtitle = `${workoutTypeNames[workoutType]} • ${new Date(workoutDate).toLocaleString()}${hasPriorWorkout ? '' : ' • No prior session to compare'}`
+
+      sessionOverview.value = {
+        subtitle,
+        exercises,
+        weightRecordCount,
+        repsRecordCount
+      }
+    }
+
     function showScreen(screen) {
       currentScreen.value = screen;
+      const isWorkoutScreen = screen === 'arms' || screen === 'chest' || screen === 'legs'
       // Reset timer when leaving active workout screens
-      if (screen !== 'arms' && screen !== 'chest' && screen !== 'legs') {
+      if (!isWorkoutScreen) {
         resetTimer();
       }
       if (screen === 'progress') {
         loadProgressData();
-      } else if (screen !== 'choose') {
+      } else if (isWorkoutScreen) {
         isFreshWorkout.value = true; // Assume fresh workout until we check for auto-save
         loadWorkoutData(screen);
       } else {
@@ -478,12 +622,13 @@ export default {
     }
 
     function autoSaveWorkout() {
-      // Don't auto-save on the choose screen
-      if (currentScreen.value === 'choose') return;
+      const workoutType = currentScreen.value;
+      const isWorkoutScreen = workoutType === 'arms' || workoutType === 'chest' || workoutType === 'legs'
+      // Only auto-save active workout screens
+      if (!isWorkoutScreen) return;
       // Avoid creating restore prompts for empty/fresh sessions (e.g. timer only)
       if (isFreshWorkout.value) return;
-      
-      const workoutType = currentScreen.value;
+
       const autoSaveData = {
         screen: currentScreen.value,
         workoutType: workoutType,
@@ -556,16 +701,15 @@ export default {
     }
 
     function saveWorkout(workoutType) {
-      const workoutName = {
-        arms: 'Arms & Shoulders',
-        chest: 'Chest & Core',
-        legs: 'Legs'
-      }[workoutType]
+      const workoutName = workoutTypeNames[workoutType]
+      const priorWorkout = getMostRecentPriorWorkout(workoutName)
+      const workoutDate = new Date().toISOString()
+      const exercisesData = JSON.parse(JSON.stringify(currentWorkoutData.value[workoutType]))
       
       const workout = {
-        date: new Date().toISOString(),
+        date: workoutDate,
         type: workoutName,
-        exercises: currentWorkoutData.value[workoutType]
+        exercises: exercisesData
       }
       
       const workouts = JSON.parse(localStorage.getItem('workouts') || '[]')
@@ -582,9 +726,10 @@ export default {
       
       // Reload defaults from the now-updated workouts to reflect new placeholders
       loadDefaultData()
+
+      buildSessionOverview(workoutType, workoutDate, exercisesData, priorWorkout)
       
-      alert('Workout saved! Your settings are remembered for next time.')
-      showScreen('choose')
+      showScreen('session-overview')
     }
 
     // Streak functionality - FIXED VERSION
@@ -1007,6 +1152,7 @@ export default {
       capitalize,
       timerSeconds,
       timerActive,
+      sessionOverview,
       startTimer,
       toggleTimer,
       resetTimer
@@ -1522,5 +1668,112 @@ input, select, textarea {
 
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-table th,
+.progress-table td {
+  padding: 10px 8px;
+  text-align: left;
+  font-size: 0.86em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.progress-table th {
+  background: rgba(0, 0, 0, 0.22);
+  font-weight: 700;
+}
+
+.progress-table tr:last-child td {
+  border-bottom: none;
+}
+
+.session-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.summary-pill {
+  padding: 10px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 0.9em;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.summary-pill-weight {
+  background: rgba(76, 175, 80, 0.25);
+}
+
+.summary-pill-reps {
+  background: rgba(255, 193, 7, 0.25);
+}
+
+.session-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.legend-item {
+  font-size: 0.8em;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.legend-weight {
+  background: rgba(76, 175, 80, 0.25);
+}
+
+.legend-reps {
+  background: rgba(255, 193, 7, 0.25);
+}
+
+.session-overview-table-wrap {
+  overflow-x: auto;
+}
+
+.session-exercise-panel {
+  padding: 16px;
+}
+
+.session-set-count {
+  min-width: 26px;
+  text-align: center;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.session-value {
+  padding: 8px;
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
+  font-weight: 600;
+}
+
+.session-value.record-weight {
+  background: rgba(76, 175, 80, 0.42);
+  color: #e8ffe8;
+}
+
+.session-value.record-reps {
+  background: rgba(255, 193, 7, 0.5);
+  color: #3a2f00;
+  font-weight: 700;
 }
 </style>
