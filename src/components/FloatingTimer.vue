@@ -2,14 +2,6 @@
   <div class="floating-timer" :class="{ 'active': isActive }">
     <div class="timer-display">{{ formattedTime }}</div>
     <div class="timer-controls">
-      <button 
-        v-if="notificationsAvailable && !notificationsEnabled"
-        class="timer-btn notify-btn" 
-        @click="handleNotificationRequest"
-        title="Enable notifications for timer alerts"
-      >
-        🔔
-      </button>
       <button class="timer-btn start-btn" @click="handleStartClick" :title="isActive ? 'Pause' : 'Start'">
         {{ isActive ? '⏸' : '▶' }}
       </button>
@@ -21,7 +13,7 @@
 </template>
 
 <script>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 
 export default {
   name: 'FloatingTimer',
@@ -35,7 +27,7 @@ export default {
       required: true
     }
   },
-  emits: ['start-timer', 'reset-timer', 'request-notifications'],
+  emits: ['start-timer', 'reset-timer'],
   setup(props, { emit }) {
     const formattedTime = computed(() => {
       const minutes = Math.floor(props.seconds / 60)
@@ -51,34 +43,10 @@ export default {
       emit('reset-timer')
     }
 
-    const notificationsAvailable = ref('Notification' in window)
-    const notificationsEnabled = ref(false)
-
-    const handleNotificationRequest = () => {
-      if ('Notification' in window) {
-        console.log('User clicked notification button, requesting permission...')
-        Notification.requestPermission().then((permission) => {
-          console.log('Notification permission result:', permission)
-          notificationsEnabled.value = permission === 'granted'
-          emit('request-notifications', permission)
-        })
-      }
-    }
-
-    onMounted(() => {
-      if ('Notification' in window) {
-        notificationsEnabled.value = Notification.permission === 'granted'
-        console.log('Notifications available. Current permission:', Notification.permission)
-      }
-    })
-
     return {
       formattedTime,
       handleStartClick,
-      handleResetClick,
-      handleNotificationRequest,
-      notificationsAvailable,
-      notificationsEnabled
+      handleResetClick
     }
   }
 }
@@ -175,25 +143,6 @@ export default {
   width: 44px;
   height: 44px;
   pointer-events: none;
-}
-
-.notify-btn {
-  background: rgba(255, 193, 7, 0.2) !important;
-  color: #ff9800 !important;
-  animation: pulse 2s infinite;
-}
-
-.notify-btn:hover {
-  background: rgba(255, 193, 7, 0.4) !important;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(255, 152, 0, 0);
-  }
 }
 
 /* iPhone 8 specific adjustments (max 375px width) */
